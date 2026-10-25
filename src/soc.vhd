@@ -14,7 +14,7 @@ entity soc is
         uart_rx     : in std_logic;
         uart_tx     : out std_logic;
 
-        -- Elan riscv core direct
+        -- Riscv core direct
         stall_i : in std_logic;
         fault_i : in std_logic;
         fault_o : out std_logic;
@@ -22,7 +22,7 @@ entity soc is
         pc_debug_o : out std_logic_vector(31 downto 0);
         previous_pc_debug_o : out std_logic_vector(31 downto 0);
 
-        -- External AXI4-Lite initiator (testbench)
+        -- External AXI4-Lite initiator
         ext_axi_awvalid : in  std_logic;
         ext_axi_awready : out std_logic;
         ext_axi_awaddr  : in  std_logic_vector(31 downto 0);
@@ -74,7 +74,10 @@ architecture rtl of soc is
 begin
     reset <= (not reset_n) or cpu_reset_i;
 
-    elan_core_inst : entity work.elan_core
+    --------------------------------------------------------------------
+    -- RISC-V CPU wrapper
+    --------------------------------------------------------------------
+    riscv_wrapper_inst : entity work.riscv_wrapper
         generic map (
             use_async_reset    => true,
             use_sync_reset     => true,
@@ -85,35 +88,50 @@ begin
             enable_divider     => true
         )
         port map (
-            clock_i                 => clk,
-            async_reset_i           => reset,
-            sync_reset_i            => reset,
-            stall_i                 => stall_i,
-            fault_i                 => fault_i,
-            fault_o                 => fault_o,
-            registers_debug_o       => registers_debug_o,
-            pc_debug_o              => pc_debug_o,
-            previous_pc_debug_o     => previous_pc_debug_o,
-            m_axi_awaddr_o          => axi_awaddr,
-            m_axi_awprot_o          => axi_awprot,
-            m_axi_awvalid_o         => axi_awvalid,
-            m_axi_awready_i         => axi_awready,
-            m_axi_wdata_o           => axi_wdata,
-            m_axi_wstrb_o           => axi_wstrb,
-            m_axi_wvalid_o          => axi_wvalid,
-            m_axi_wready_i          => axi_wready,
-            m_axi_bresp_i           => axi_bresp,
-            m_axi_bvalid_i          => axi_bvalid,
-            m_axi_bready_o          => axi_bready,
-            m_axi_araddr_o          => axi_araddr,
-            m_axi_arprot_o          => axi_arprot,
-            m_axi_arvalid_o         => axi_arvalid,
-            m_axi_arready_i         => axi_arready,
-            m_axi_rdata_i           => axi_rdata,
-            m_axi_rresp_i           => axi_rresp,
-            m_axi_rvalid_i          => axi_rvalid,
-            m_axi_rready_o          => axi_rready
-        );
+            -- Clock and reset
+            clock_i       => clk,
+            async_reset_i => not reset_n,
+            sync_reset_i  => cpu_reset_i,
+
+            -- CPU control
+            stall_i => stall_i,
+            fault_i => fault_i,
+            fault_o => fault_o,
+
+            -- Debug interface
+            registers_debug_o   => registers_debug_o,
+            pc_debug_o          => pc_debug_o,
+            previous_pc_debug_o => previous_pc_debug_o,
+
+            -- AXI4-Lite write address channel
+            m_axi_awaddr_o  => axi_awaddr,
+            m_axi_awprot_o  => axi_awprot,
+            m_axi_awvalid_o => axi_awvalid,
+            m_axi_awready_i => axi_awready,
+
+            -- AXI4-Lite write data channel
+            m_axi_wdata_o  => axi_wdata,
+            m_axi_wstrb_o  => axi_wstrb,
+            m_axi_wvalid_o => axi_wvalid,
+            m_axi_wready_i => axi_wready,
+
+            -- AXI4-Lite write response channel
+            m_axi_bresp_i  => axi_bresp,
+            m_axi_bvalid_i => axi_bvalid,
+            m_axi_bready_o => axi_bready,
+
+            -- AXI4-Lite read address channel
+            m_axi_araddr_o  => axi_araddr,
+            m_axi_arprot_o  => axi_arprot,
+            m_axi_arvalid_o => axi_arvalid,
+            m_axi_arready_i => axi_arready,
+
+            -- AXI4-Lite read data channel
+            m_axi_rdata_i  => axi_rdata,
+            m_axi_rresp_i  => axi_rresp,
+            m_axi_rvalid_i => axi_rvalid,
+            m_axi_rready_o => axi_rready
+        );    
 
     axi_soc_subsystem_inst : entity work.axi_soc_subsystem
         generic map (
