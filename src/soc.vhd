@@ -3,213 +3,123 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 entity soc is
-    generic(
-    G_SYS_FREQ : natural := 100_000_000;
-    G_BAUDRATE : natural := 125_000
+    generic (
+        G_SYS_FREQ : natural := 100_000_000;
+        G_BAUDRATE : natural := 125_000
     );
     port (
-        clk      : in  std_logic;
-        reset_n  : in  std_logic;
-        uart_rx  : in  std_logic;
-        uart_tx  : out std_logic
+        clk         : in std_logic;
+        reset_n     : in std_logic;
+        cpu_reset_i : in std_logic := '0';
+        uart_rx     : in std_logic;
+        uart_tx     : out std_logic;
+
+        -- Elan riscv core direct
+        stall_i : in std_logic;
+        fault_i : in std_logic;
+        fault_o : out std_logic;
+        registers_debug_o : out std_logic_vector(1023 downto 0);
+        pc_debug_o : out std_logic_vector(31 downto 0);
+        previous_pc_debug_o : out std_logic_vector(31 downto 0);
+
+        -- External AXI4-Lite initiator (testbench)
+        ext_axi_awvalid : in  std_logic;
+        ext_axi_awready : out std_logic;
+        ext_axi_awaddr  : in  std_logic_vector(31 downto 0);
+        ext_axi_awprot  : in  std_logic_vector(2 downto 0);
+        ext_axi_wvalid  : in  std_logic;
+        ext_axi_wready  : out std_logic;
+        ext_axi_wdata   : in  std_logic_vector(31 downto 0);
+        ext_axi_wstrb   : in  std_logic_vector(3 downto 0);
+        ext_axi_bvalid  : out std_logic;
+        ext_axi_bready  : in  std_logic;
+        ext_axi_arvalid : in  std_logic;
+        ext_axi_arready : out std_logic;
+        ext_axi_araddr  : in  std_logic_vector(31 downto 0);
+        ext_axi_arprot  : in  std_logic_vector(2 downto 0);
+        ext_axi_rvalid  : out std_logic;
+        ext_axi_rready  : in  std_logic;
+        ext_axi_rdata   : out std_logic_vector(31 downto 0);
+        ext_axi_bresp   : out std_logic_vector(1 downto 0);
+        ext_axi_rresp   : out std_logic_vector(1 downto 0)
     );
 end entity;
 
 architecture rtl of soc is
 
--- picorv32_axi signal
+    signal reset : std_logic;
+    signal gpio_in  : std_logic_vector(31 downto 0);
+    signal gpio_out : std_logic_vector(31 downto 0);
 
-component picorv32_axi is
-    generic (
-        ENABLE_COUNTERS       : integer := 1;
-        ENABLE_COUNTERS64     : integer := 1;
-        ENABLE_REGS_16_31     : integer := 1;
-        ENABLE_REGS_DUALPORT  : integer := 1;
-        TWO_STAGE_SHIFT       : integer := 1;
-        BARREL_SHIFTER        : integer := 0;
-        TWO_CYCLE_COMPARE     : integer := 0;
-        TWO_CYCLE_ALU         : integer := 0;
-        COMPRESSED_ISA        : integer := 0;
-        CATCH_MISALIGN        : integer := 1;
-        CATCH_ILLINSN         : integer := 1;
-        ENABLE_PCPI           : integer := 0;
-        ENABLE_MUL            : integer := 0;
-        ENABLE_FAST_MUL       : integer := 0;
-        ENABLE_DIV            : integer := 0;
-        ENABLE_IRQ            : integer := 0;
-        ENABLE_IRQ_QREGS      : integer := 1;
-        ENABLE_IRQ_TIMER      : integer := 1;
-        ENABLE_TRACE          : integer := 0;
-        REGS_INIT_ZERO        : integer := 0;
-
-        MASKED_IRQ            : std_logic_vector(31 downto 0)
-                              := x"00000000";
-        LATCHED_IRQ           : std_logic_vector(31 downto 0)
-                              := x"FFFFFFFF";
-        PROGADDR_RESET        : std_logic_vector(31 downto 0)
-                              := x"00000000";
-        PROGADDR_IRQ          : std_logic_vector(31 downto 0)
-                              := x"00000010";
-        STACKADDR             : std_logic_vector(31 downto 0)
-                              := x"FFFFFFFF"
-    );
-    port (
-        clk                   : in  std_logic;
-        resetn                : in  std_logic;
-        trap                  : out std_logic;
-
-        -- AXI4-Lite master write-address channel
-        mem_axi_awvalid       : out std_logic;
-        mem_axi_awready       : in  std_logic;
-        mem_axi_awaddr        : out std_logic_vector(31 downto 0);
-        mem_axi_awprot        : out std_logic_vector(2 downto 0);
-
-        -- AXI4-Lite master write-data channel
-        mem_axi_wvalid        : out std_logic;
-        mem_axi_wready        : in  std_logic;
-        mem_axi_wdata         : out std_logic_vector(31 downto 0);
-        mem_axi_wstrb         : out std_logic_vector(3 downto 0);
-
-        -- AXI4-Lite master write-response channel
-        mem_axi_bvalid        : in  std_logic;
-        mem_axi_bready        : out std_logic;
-
-        -- AXI4-Lite master read-address channel
-        mem_axi_arvalid       : out std_logic;
-        mem_axi_arready       : in  std_logic;
-        mem_axi_araddr        : out std_logic_vector(31 downto 0);
-        mem_axi_arprot        : out std_logic_vector(2 downto 0);
-
-        -- AXI4-Lite master read-data channel
-        mem_axi_rvalid        : in  std_logic;
-        mem_axi_rready        : out std_logic;
-        mem_axi_rdata         : in  std_logic_vector(31 downto 0);
-
-        -- Pico Co-Processor Interface
-        pcpi_valid            : out std_logic;
-        pcpi_insn             : out std_logic_vector(31 downto 0);
-        pcpi_rs1              : out std_logic_vector(31 downto 0);
-        pcpi_rs2              : out std_logic_vector(31 downto 0);
-        pcpi_wr               : in  std_logic;
-        pcpi_rd               : in  std_logic_vector(31 downto 0);
-        pcpi_wait             : in  std_logic;
-        pcpi_ready            : in  std_logic;
-
-        -- IRQ interface
-        irq                   : in  std_logic_vector(31 downto 0);
-        eoi                   : out std_logic_vector(31 downto 0);
-
-        -- Trace interface
-        trace_valid           : out std_logic;
-        trace_data            : out std_logic_vector(35 downto 0)
-    );
-end component;
-
-signal picorv32_axi_trap              : std_logic;
-signal picorv32_axi_mem_axi_awvalid   : std_logic;
-signal picorv32_axi_mem_axi_awready   : std_logic;
-signal picorv32_axi_mem_axi_awaddr    : std_logic_vector(31 downto 0);
-signal picorv32_axi_mem_axi_awprot    : std_logic_vector(2 downto 0);
-signal picorv32_axi_mem_axi_wvalid    : std_logic;
-signal picorv32_axi_mem_axi_wready    : std_logic;
-signal picorv32_axi_mem_axi_wdata     : std_logic_vector(31 downto 0);
-signal picorv32_axi_mem_axi_wstrb     : std_logic_vector(3 downto 0);
-signal picorv32_axi_mem_axi_bvalid    : std_logic;
-signal picorv32_axi_mem_axi_bready    : std_logic;
-signal picorv32_axi_mem_axi_arvalid   : std_logic;
-signal picorv32_axi_mem_axi_arready   : std_logic;
-signal picorv32_axi_mem_axi_araddr    : std_logic_vector(31 downto 0);
-signal picorv32_axi_mem_axi_arprot    : std_logic_vector(2 downto 0);
-signal picorv32_axi_mem_axi_rvalid    : std_logic;
-signal picorv32_axi_mem_axi_rready    : std_logic;
-signal picorv32_axi_mem_axi_rdata     : std_logic_vector(31 downto 0);
-signal picorv32_axi_pcpi_valid        : std_logic;
-signal picorv32_axi_pcpi_insn         : std_logic_vector(31 downto 0);
-signal picorv32_axi_pcpi_rs1          : std_logic_vector(31 downto 0);
-signal picorv32_axi_pcpi_rs2          : std_logic_vector(31 downto 0);
-signal picorv32_axi_pcpi_wr           : std_logic;
-signal picorv32_axi_pcpi_rd           : std_logic_vector(31 downto 0);
-signal picorv32_axi_pcpi_wait         : std_logic;
-signal picorv32_axi_pcpi_ready        : std_logic;
-signal picorv32_axi_irq               : std_logic_vector(31 downto 0);
-signal picorv32_axi_eoi               : std_logic_vector(31 downto 0);
-signal picorv32_axi_trace_valid       : std_logic;
-signal picorv32_axi_trace_data        : std_logic_vector(35 downto 0);
-
-signal gpio_in                        : std_logic_vector(31 downto 0);
-signal gpio_out                       : std_logic_vector(31 downto 0);
+    signal axi_awaddr : std_logic_vector(31 downto 0);
+    signal axi_awprot : std_logic_vector(2 downto 0);
+    signal axi_awvalid : std_logic;
+    signal axi_awready : std_logic;
+    signal axi_wdata : std_logic_vector(31 downto 0);
+    signal axi_wstrb : std_logic_vector(3 downto 0);
+    signal axi_wvalid : std_logic;
+    signal axi_wready : std_logic;
+    signal axi_bresp : std_logic_vector(1 downto 0);
+    signal axi_bvalid : std_logic;
+    signal axi_bready : std_logic;
+    signal axi_araddr : std_logic_vector(31 downto 0);
+    signal axi_arprot : std_logic_vector(2 downto 0);
+    signal axi_arvalid : std_logic;
+    signal axi_arready : std_logic;
+    signal axi_rdata : std_logic_vector(31 downto 0);
+    signal axi_rresp : std_logic_vector(1 downto 0);
+    signal axi_rvalid : std_logic;
+    signal axi_rready : std_logic;
 
 begin
+    reset <= (not reset_n) or cpu_reset_i;
 
-picorv32_axi_inst: picorv32_axi
-    generic map (
-        ENABLE_COUNTERS      => 1,
-        ENABLE_COUNTERS64    => 1,
-        ENABLE_REGS_16_31    => 1,
-        ENABLE_REGS_DUALPORT => 1,
-        TWO_STAGE_SHIFT      => 1,
-        BARREL_SHIFTER       => 0,
-        TWO_CYCLE_COMPARE    => 0,
-        TWO_CYCLE_ALU        => 0,
-        COMPRESSED_ISA       => 0,
-        CATCH_MISALIGN       => 1,
-        CATCH_ILLINSN        => 1,
-        ENABLE_PCPI          => 0,
-        ENABLE_MUL           => 0,
-        ENABLE_FAST_MUL      => 0,
-        ENABLE_DIV           => 0,
-        ENABLE_IRQ           => 0,
-        ENABLE_IRQ_QREGS     => 1,
-        ENABLE_IRQ_TIMER     => 1,
-        ENABLE_TRACE         => 0,
-        REGS_INIT_ZERO       => 0,
-        MASKED_IRQ           => x"00000000",
-        LATCHED_IRQ          => x"FFFFFFFF",
-        PROGADDR_RESET       => x"00000000",
-        PROGADDR_IRQ         => x"00000010",
-        STACKADDR            => x"FFFFFFFF"
-    )
-    port map (
-        clk               => clk,
-        resetn            => reset_n,
-        trap              => picorv32_axi_trap,
-        mem_axi_awvalid   => picorv32_axi_mem_axi_awvalid,
-        mem_axi_awready   => picorv32_axi_mem_axi_awready,
-        mem_axi_awaddr    => picorv32_axi_mem_axi_awaddr,
-        mem_axi_awprot    => picorv32_axi_mem_axi_awprot,
-        mem_axi_wvalid    => picorv32_axi_mem_axi_wvalid,
-        mem_axi_wready    => picorv32_axi_mem_axi_wready,
-        mem_axi_wdata     => picorv32_axi_mem_axi_wdata,
-        mem_axi_wstrb     => picorv32_axi_mem_axi_wstrb,
-        mem_axi_bvalid    => picorv32_axi_mem_axi_bvalid,
-        mem_axi_bready    => picorv32_axi_mem_axi_bready,
-        mem_axi_arvalid   => picorv32_axi_mem_axi_arvalid,
-        mem_axi_arready   => picorv32_axi_mem_axi_arready,
-        mem_axi_araddr    => picorv32_axi_mem_axi_araddr,
-        mem_axi_arprot    => picorv32_axi_mem_axi_arprot,
-        mem_axi_rvalid    => picorv32_axi_mem_axi_rvalid,
-        mem_axi_rready    => picorv32_axi_mem_axi_rready,
-        mem_axi_rdata     => picorv32_axi_mem_axi_rdata,
-        pcpi_valid        => picorv32_axi_pcpi_valid,
-        pcpi_insn         => picorv32_axi_pcpi_insn,
-        pcpi_rs1          => picorv32_axi_pcpi_rs1,
-        pcpi_rs2          => picorv32_axi_pcpi_rs2,
-        pcpi_wr           => picorv32_axi_pcpi_wr,
-        pcpi_rd           => picorv32_axi_pcpi_rd,
-        pcpi_wait         => picorv32_axi_pcpi_wait,
-        pcpi_ready        => picorv32_axi_pcpi_ready,
-        irq               => picorv32_axi_irq,
-        eoi               => picorv32_axi_eoi,
-        trace_valid       => picorv32_axi_trace_valid,
-        trace_data        => picorv32_axi_trace_data
-    );
+    elan_core_inst : entity work.elan_core
+        generic map (
+            use_async_reset    => true,
+            use_sync_reset     => true,
+            async_reset_active => '1',
+            sync_reset_active  => '1',
+            start_address      => x"00000000",
+            enable_multiplier  => true,
+            enable_divider     => true
+        )
+        port map (
+            clock_i                 => clk,
+            async_reset_i           => reset,
+            sync_reset_i            => reset,
+            stall_i                 => stall_i,
+            fault_i                 => fault_i,
+            fault_o                 => fault_o,
+            registers_debug_o       => registers_debug_o,
+            pc_debug_o              => pc_debug_o,
+            previous_pc_debug_o     => previous_pc_debug_o,
+            m_axi_awaddr_o          => axi_awaddr,
+            m_axi_awprot_o          => axi_awprot,
+            m_axi_awvalid_o         => axi_awvalid,
+            m_axi_awready_i         => axi_awready,
+            m_axi_wdata_o           => axi_wdata,
+            m_axi_wstrb_o           => axi_wstrb,
+            m_axi_wvalid_o          => axi_wvalid,
+            m_axi_wready_i          => axi_wready,
+            m_axi_bresp_i           => axi_bresp,
+            m_axi_bvalid_i          => axi_bvalid,
+            m_axi_bready_o          => axi_bready,
+            m_axi_araddr_o          => axi_araddr,
+            m_axi_arprot_o          => axi_arprot,
+            m_axi_arvalid_o         => axi_arvalid,
+            m_axi_arready_i         => axi_arready,
+            m_axi_rdata_i           => axi_rdata,
+            m_axi_rresp_i           => axi_rresp,
+            m_axi_rvalid_i          => axi_rvalid,
+            m_axi_rready_o          => axi_rready
+        );
 
-
-    axi_soc_subsystem_inst: entity work.axi_soc_subsystem
+    axi_soc_subsystem_inst : entity work.axi_soc_subsystem
         generic map (
             G_ADDR_WIDTH => 32,
             G_DATA_WIDTH => 32,
-            G_BASE0      => (others => '0'),
+            G_BASE0      => x"00000000",
             G_LIMIT0     => x"000FFFFF",
             G_BASE1      => x"00100000",
             G_LIMIT1     => x"001FFFFF",
@@ -224,35 +134,52 @@ picorv32_axi_inst: picorv32_axi
             G_RX_DEPTH   => 256
         )
         port map (
-            clk               => clk,
-            resetn            => reset_n,
-            mem_axi_awvalid   => picorv32_axi_mem_axi_awvalid,
-            mem_axi_awready   => picorv32_axi_mem_axi_awready,
-            mem_axi_awaddr    => picorv32_axi_mem_axi_awaddr,
-            mem_axi_awprot    => picorv32_axi_mem_axi_awprot,
-            mem_axi_wvalid    => picorv32_axi_mem_axi_wvalid,
-            mem_axi_wready    => picorv32_axi_mem_axi_wready,
-            mem_axi_wdata     => picorv32_axi_mem_axi_wdata,
-            mem_axi_wstrb     => picorv32_axi_mem_axi_wstrb,
-            mem_axi_bvalid    => picorv32_axi_mem_axi_bvalid,
-            mem_axi_bready    => picorv32_axi_mem_axi_bready,
-            mem_axi_arvalid   => picorv32_axi_mem_axi_arvalid,
-            mem_axi_arready   => picorv32_axi_mem_axi_arready,
-            mem_axi_araddr    => picorv32_axi_mem_axi_araddr,
-            mem_axi_arprot    => picorv32_axi_mem_axi_arprot,
-            mem_axi_rvalid    => picorv32_axi_mem_axi_rvalid,
-            mem_axi_rready    => picorv32_axi_mem_axi_rready,
-            mem_axi_rdata     => picorv32_axi_mem_axi_rdata,
-            mem_axi_bresp     => open,
-            mem_axi_rresp     => open,
-            uart_rx           => uart_rx,
-            uart_tx           => uart_tx,
-            gpio_in           => gpio_in,
-            gpio_out          => gpio_out
+            clk                => clk,
+            resetn             => reset_n,
+            cpu_axi_awaddr     => axi_awaddr,
+            cpu_axi_awprot     => axi_awprot,
+            cpu_axi_awvalid    => axi_awvalid,
+            cpu_axi_awready    => axi_awready,
+            cpu_axi_wdata      => axi_wdata,
+            cpu_axi_wstrb      => axi_wstrb,
+            cpu_axi_wvalid     => axi_wvalid,
+            cpu_axi_wready     => axi_wready,
+            cpu_axi_bresp      => axi_bresp,
+            cpu_axi_bvalid     => axi_bvalid,
+            cpu_axi_bready     => axi_bready,
+            cpu_axi_araddr     => axi_araddr,
+            cpu_axi_arprot     => axi_arprot,
+            cpu_axi_arvalid    => axi_arvalid,
+            cpu_axi_arready    => axi_arready,
+            cpu_axi_rdata      => axi_rdata,
+            cpu_axi_rresp      => axi_rresp,
+            cpu_axi_rvalid     => axi_rvalid,
+            cpu_axi_rready     => axi_rready,
+            ext_axi_awaddr     => ext_axi_awaddr,
+            ext_axi_awprot     => ext_axi_awprot,
+            ext_axi_awvalid    => ext_axi_awvalid,
+            ext_axi_awready    => ext_axi_awready,
+            ext_axi_wdata      => ext_axi_wdata,
+            ext_axi_wstrb      => ext_axi_wstrb,
+            ext_axi_wvalid     => ext_axi_wvalid,
+            ext_axi_wready     => ext_axi_wready,
+            ext_axi_bresp      => ext_axi_bresp,
+            ext_axi_bvalid     => ext_axi_bvalid,
+            ext_axi_bready     => ext_axi_bready,
+            ext_axi_araddr     => ext_axi_araddr,
+            ext_axi_arprot     => ext_axi_arprot,
+            ext_axi_arvalid    => ext_axi_arvalid,
+            ext_axi_arready    => ext_axi_arready,
+            ext_axi_rdata      => ext_axi_rdata,
+            ext_axi_rresp      => ext_axi_rresp,
+            ext_axi_rvalid     => ext_axi_rvalid,
+            ext_axi_rready     => ext_axi_rready,
+            uart_rx            => uart_rx,
+            uart_tx            => uart_tx,
+            gpio_in            => gpio_in,
+            gpio_out           => gpio_out
         );
 
-gpio_in <= gpio_out;
-    
+    gpio_in <= gpio_out;
 
-
-end rtl;
+end architecture rtl;

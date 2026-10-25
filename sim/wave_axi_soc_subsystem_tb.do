@@ -12,8 +12,8 @@ add wave -noupdate -divider {=====================}
 add wave -noupdate -divider {axi_soc_subsystem_inst}
 add wave -position insertpoint sim:/axi_soc_subsystem_tb/axi_soc_subsystem_inst/*
 
-add wave -noupdate -divider {u_axi_lite_interconnect_1x4}
-add wave -position insertpoint sim:/axi_soc_subsystem_tb/axi_soc_subsystem_inst/u_axi_lite_interconnect_1x4/*
+add wave -noupdate -divider {u_axi_lite_interconnect}
+add wave -position insertpoint sim:/axi_soc_subsystem_tb/axi_soc_subsystem_inst/u_axi_lite_interconnect/*
 
 add wave -noupdate -divider {u_axi_ram}
 add wave -position insertpoint sim:/axi_soc_subsystem_tb/axi_soc_subsystem_inst/u_axi_ram/*

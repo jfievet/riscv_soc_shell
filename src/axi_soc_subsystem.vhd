@@ -5,6 +5,7 @@ use ieee.numeric_std.all;
 library work;
 use work.axi_slave_reg_bank_pkg.all;
 use work.timestamp_pkg.all;
+use work.axi_lite_interconnect_pkg.all;
 
 entity axi_soc_subsystem is
     generic (
@@ -33,25 +34,44 @@ entity axi_soc_subsystem is
     port (
         clk            : in  std_logic;                          -- Added clock
         resetn         : in  std_logic;                          -- Added active-low reset
-        mem_axi_awvalid : in  std_logic;
-        mem_axi_awready : out std_logic;
-        mem_axi_awaddr  : in  std_logic_vector(G_ADDR_WIDTH-1 downto 0);
-        mem_axi_awprot  : in  std_logic_vector(2 downto 0);
-        mem_axi_wvalid  : in  std_logic;
-        mem_axi_wready  : out std_logic;
-        mem_axi_wdata   : in  std_logic_vector(G_DATA_WIDTH-1 downto 0);
-        mem_axi_wstrb   : in  std_logic_vector((G_DATA_WIDTH/8)-1 downto 0);
-        mem_axi_bvalid  : out std_logic;
-        mem_axi_bready  : in  std_logic;
-        mem_axi_arvalid : in  std_logic;
-        mem_axi_arready : out std_logic;
-        mem_axi_araddr  : in  std_logic_vector(G_ADDR_WIDTH-1 downto 0);
-        mem_axi_arprot  : in  std_logic_vector(2 downto 0);
-        mem_axi_rvalid  : out std_logic;
-        mem_axi_rready  : in  std_logic;
-        mem_axi_rdata   : out std_logic_vector(G_DATA_WIDTH-1 downto 0);
-        mem_axi_bresp   : out std_logic_vector(1 downto 0);
-        mem_axi_rresp   : out std_logic_vector(1 downto 0);
+        cpu_axi_awvalid : in  std_logic;
+        cpu_axi_awready : out std_logic;
+        cpu_axi_awaddr  : in  std_logic_vector(G_ADDR_WIDTH-1 downto 0);
+        cpu_axi_awprot  : in  std_logic_vector(2 downto 0);
+        cpu_axi_wvalid  : in  std_logic;
+        cpu_axi_wready  : out std_logic;
+        cpu_axi_wdata   : in  std_logic_vector(G_DATA_WIDTH-1 downto 0);
+        cpu_axi_wstrb   : in  std_logic_vector((G_DATA_WIDTH/8)-1 downto 0);
+        cpu_axi_bvalid  : out std_logic;
+        cpu_axi_bready  : in  std_logic;
+        cpu_axi_arvalid : in  std_logic;
+        cpu_axi_arready : out std_logic;
+        cpu_axi_araddr  : in  std_logic_vector(G_ADDR_WIDTH-1 downto 0);
+        cpu_axi_arprot  : in  std_logic_vector(2 downto 0);
+        cpu_axi_rvalid  : out std_logic;
+        cpu_axi_rready  : in  std_logic;
+        cpu_axi_rdata   : out std_logic_vector(G_DATA_WIDTH-1 downto 0);
+        cpu_axi_bresp   : out std_logic_vector(1 downto 0);
+        cpu_axi_rresp   : out std_logic_vector(1 downto 0);
+        ext_axi_awvalid : in  std_logic;
+        ext_axi_awready : out std_logic;
+        ext_axi_awaddr  : in  std_logic_vector(G_ADDR_WIDTH-1 downto 0);
+        ext_axi_awprot  : in  std_logic_vector(2 downto 0);
+        ext_axi_wvalid  : in  std_logic;
+        ext_axi_wready  : out std_logic;
+        ext_axi_wdata   : in  std_logic_vector(G_DATA_WIDTH-1 downto 0);
+        ext_axi_wstrb   : in  std_logic_vector((G_DATA_WIDTH/8)-1 downto 0);
+        ext_axi_bvalid  : out std_logic;
+        ext_axi_bready  : in  std_logic;
+        ext_axi_arvalid : in  std_logic;
+        ext_axi_arready : out std_logic;
+        ext_axi_araddr  : in  std_logic_vector(G_ADDR_WIDTH-1 downto 0);
+        ext_axi_arprot  : in  std_logic_vector(2 downto 0);
+        ext_axi_rvalid  : out std_logic;
+        ext_axi_rready  : in  std_logic;
+        ext_axi_rdata   : out std_logic_vector(G_DATA_WIDTH-1 downto 0);
+        ext_axi_bresp   : out std_logic_vector(1 downto 0);
+        ext_axi_rresp   : out std_logic_vector(1 downto 0);
         uart_rx         : in  std_logic;
         uart_tx         : out std_logic;
         gpio_in         : in std_logic_vector(31 downto 0);
@@ -61,105 +81,82 @@ end entity;
 
 architecture rtl of axi_soc_subsystem is
 
--- Constants
-constant axi_lite_interconnect_1x4_BASE0_c  : std_logic_vector(G_ADDR_WIDTH-1 downto 0) := G_BASE0  ;
-constant axi_lite_interconnect_1x4_LIMIT0_c : std_logic_vector(G_ADDR_WIDTH-1 downto 0) := G_LIMIT0 ;
-constant axi_lite_interconnect_1x4_BASE1_c  : std_logic_vector(G_ADDR_WIDTH-1 downto 0) := G_BASE1  ;
-constant axi_lite_interconnect_1x4_LIMIT1_c : std_logic_vector(G_ADDR_WIDTH-1 downto 0) := G_LIMIT1 ;
-constant axi_lite_interconnect_1x4_BASE2_c  : std_logic_vector(G_ADDR_WIDTH-1 downto 0) := G_BASE2  ;
-constant axi_lite_interconnect_1x4_LIMIT2_c : std_logic_vector(G_ADDR_WIDTH-1 downto 0) := G_LIMIT2 ;
-constant axi_lite_interconnect_1x4_BASE3_c  : std_logic_vector(G_ADDR_WIDTH-1 downto 0) := G_BASE3  ;
-constant axi_lite_interconnect_1x4_LIMIT3_c : std_logic_vector(G_ADDR_WIDTH-1 downto 0) := G_LIMIT3 ;
+-- Interconnect configuration
+constant C_NB_MASTERS : integer := 2; -- CPU and external initiators
+constant C_NB_SLAVES  : integer := 4; -- RAM, UART, GPIO, register bank
+
+constant C_ADDR_START : axi_32b_bus_type := (
+    0 => G_BASE0,
+    1 => G_BASE1,
+    2 => G_BASE2,
+    3 => G_BASE3,
+    others => (others => '0')
+);
+
+constant C_ADDR_END : axi_32b_bus_type := (
+    0 => G_LIMIT0,
+    1 => G_LIMIT1,
+    2 => G_LIMIT2,
+    3 => G_LIMIT3,
+    others => (others => '0')
+);
+
+constant C_ADDR_OFFSET : axi_32b_bus_type := (
+    0 => G_BASE0,
+    1 => G_BASE1,
+    2 => G_BASE2,
+    3 => G_BASE3,
+    others => (others => '0')
+);
+
+-- Array ports: initiators are indexed 0=CPU, 1=external.
+-- The interconnect package must support the corresponding array bounds.
+    -- AXI-Lite Interconnect Slave
+    signal ic_s_awvalid : std_logic_vector(nb_axi_lite_array - 1 downto 0);
+    signal ic_s_awready : std_logic_vector(nb_axi_lite_array - 1 downto 0);
+    signal ic_s_awaddr  : axi_32b_bus_type;
+    signal ic_s_wvalid  : std_logic_vector(nb_axi_lite_array - 1 downto 0);
+    signal ic_s_wready  : std_logic_vector(nb_axi_lite_array - 1 downto 0);
+    signal ic_s_wdata   : axi_32b_bus_type;
+    signal ic_s_wstrb   : axi_4b_bus_type;
+    signal ic_s_bvalid  : std_logic_vector(nb_axi_lite_array - 1 downto 0);
+    signal ic_s_bready  : std_logic_vector(nb_axi_lite_array - 1 downto 0);
+    signal ic_s_bresp   : axi_2b_bus_type;
+    signal ic_s_arvalid : std_logic_vector(nb_axi_lite_array - 1 downto 0);
+    signal ic_s_arready : std_logic_vector(nb_axi_lite_array - 1 downto 0);
+    signal ic_s_araddr  : axi_32b_bus_type;
+    signal ic_s_rvalid  : std_logic_vector(nb_axi_lite_array - 1 downto 0);
+    signal ic_s_rready  : std_logic_vector(nb_axi_lite_array - 1 downto 0);
+    signal ic_s_rdata   : axi_32b_bus_type;
+    signal ic_s_rresp   : axi_2b_bus_type;
+
+    -- AXI-Lite Interconnect Master
+    signal ic_m_awvalid : std_logic_vector(nb_axi_lite_array - 1 downto 0);
+    signal ic_m_awready : std_logic_vector(nb_axi_lite_array - 1 downto 0);
+    signal ic_m_awaddr  : axi_32b_bus_type;
+    signal ic_m_wvalid  : std_logic_vector(nb_axi_lite_array - 1 downto 0);
+    signal ic_m_wready  : std_logic_vector(nb_axi_lite_array - 1 downto 0);
+    signal ic_m_wdata   : axi_32b_bus_type;
+    signal ic_m_wstrb   : axi_4b_bus_type;
+    signal ic_m_bvalid  : std_logic_vector(nb_axi_lite_array - 1 downto 0);
+    signal ic_m_bready  : std_logic_vector(nb_axi_lite_array - 1 downto 0);
+    signal ic_m_bresp   : axi_2b_bus_type;
+    signal ic_m_arvalid : std_logic_vector(nb_axi_lite_array - 1 downto 0);
+    signal ic_m_arready : std_logic_vector(nb_axi_lite_array - 1 downto 0);
+    signal ic_m_araddr  : axi_32b_bus_type;
+    signal ic_m_rvalid  : std_logic_vector(nb_axi_lite_array - 1 downto 0);
+    signal ic_m_rready  : std_logic_vector(nb_axi_lite_array - 1 downto 0);
+    signal ic_m_rdata   : axi_32b_bus_type;
+    signal ic_m_rresp   : axi_2b_bus_type;
 
 -- AXI RAM constants
-constant axi_ram_DEPTH_c : integer:= G_RAM_DEPTH;
-constant C_RAM_VENDOR    : integer := 1;
-
+constant axi_ram_DEPTH_c : integer := G_RAM_DEPTH;
+constant C_RAM_VENDOR : integer := 1;
 -- AXI UART generics constants
-constant axi_uart_SYS_FREQ_c  : natural := G_SYS_FREQ;
-constant axi_uart_BAUDRATE_c  : natural := G_BAUDRATE;
-constant axi_uart_TX_DEPTH_c  : natural := G_TX_DEPTH;
-constant axi_uart_RX_DEPTH_c  : natural := G_RX_DEPTH;
-
--- Master side extra response  (top does not expose BRESP/RRESP)
-signal axi_lite_interconnect_1x4_M_BRESP : std_logic_vector(1 downto 0);
-signal axi_lite_interconnect_1x4_M_RRESP : std_logic_vector(1 downto 0);
-
--- Slave 0 
-signal axi_lite_interconnect_1x4_S0_AWADDR  : std_logic_vector(G_ADDR_WIDTH-1 downto 0);
-signal axi_lite_interconnect_1x4_S0_AWVALID : std_logic;
-signal axi_lite_interconnect_1x4_S0_AWREADY : std_logic;
-signal axi_lite_interconnect_1x4_S0_WDATA   : std_logic_vector(G_DATA_WIDTH-1 downto 0);
-signal axi_lite_interconnect_1x4_S0_WSTRB   : std_logic_vector((G_DATA_WIDTH/8)-1 downto 0);
-signal axi_lite_interconnect_1x4_S0_WVALID  : std_logic;
-signal axi_lite_interconnect_1x4_S0_WREADY  : std_logic;
-signal axi_lite_interconnect_1x4_S0_BRESP   : std_logic_vector(1 downto 0);
-signal axi_lite_interconnect_1x4_S0_BVALID  : std_logic;
-signal axi_lite_interconnect_1x4_S0_BREADY  : std_logic;
-signal axi_lite_interconnect_1x4_S0_ARADDR  : std_logic_vector(G_ADDR_WIDTH-1 downto 0);
-signal axi_lite_interconnect_1x4_S0_ARVALID : std_logic;
-signal axi_lite_interconnect_1x4_S0_ARREADY : std_logic;
-signal axi_lite_interconnect_1x4_S0_RDATA   : std_logic_vector(G_DATA_WIDTH-1 downto 0);
-signal axi_lite_interconnect_1x4_S0_RRESP   : std_logic_vector(1 downto 0);
-signal axi_lite_interconnect_1x4_S0_RVALID  : std_logic;
-signal axi_lite_interconnect_1x4_S0_RREADY  : std_logic;
-
--- Slave 1 
-signal axi_lite_interconnect_1x4_S1_AWADDR  : std_logic_vector(G_ADDR_WIDTH-1 downto 0);
-signal axi_lite_interconnect_1x4_S1_AWVALID : std_logic;
-signal axi_lite_interconnect_1x4_S1_AWREADY : std_logic;
-signal axi_lite_interconnect_1x4_S1_WDATA   : std_logic_vector(G_DATA_WIDTH-1 downto 0);
-signal axi_lite_interconnect_1x4_S1_WSTRB   : std_logic_vector((G_DATA_WIDTH/8)-1 downto 0);
-signal axi_lite_interconnect_1x4_S1_WVALID  : std_logic;
-signal axi_lite_interconnect_1x4_S1_WREADY  : std_logic;
-signal axi_lite_interconnect_1x4_S1_BRESP   : std_logic_vector(1 downto 0);
-signal axi_lite_interconnect_1x4_S1_BVALID  : std_logic;
-signal axi_lite_interconnect_1x4_S1_BREADY  : std_logic;
-signal axi_lite_interconnect_1x4_S1_ARADDR  : std_logic_vector(G_ADDR_WIDTH-1 downto 0);
-signal axi_lite_interconnect_1x4_S1_ARVALID : std_logic;
-signal axi_lite_interconnect_1x4_S1_ARREADY : std_logic;
-signal axi_lite_interconnect_1x4_S1_RDATA   : std_logic_vector(G_DATA_WIDTH-1 downto 0);
-signal axi_lite_interconnect_1x4_S1_RRESP   : std_logic_vector(1 downto 0);
-signal axi_lite_interconnect_1x4_S1_RVALID  : std_logic;
-signal axi_lite_interconnect_1x4_S1_RREADY  : std_logic;
-
--- Slave 2 
-signal axi_lite_interconnect_1x4_S2_AWADDR  : std_logic_vector(G_ADDR_WIDTH-1 downto 0);
-signal axi_lite_interconnect_1x4_S2_AWVALID : std_logic;
-signal axi_lite_interconnect_1x4_S2_AWREADY : std_logic;
-signal axi_lite_interconnect_1x4_S2_WDATA   : std_logic_vector(G_DATA_WIDTH-1 downto 0);
-signal axi_lite_interconnect_1x4_S2_WSTRB   : std_logic_vector((G_DATA_WIDTH/8)-1 downto 0);
-signal axi_lite_interconnect_1x4_S2_WVALID  : std_logic;
-signal axi_lite_interconnect_1x4_S2_WREADY  : std_logic;
-signal axi_lite_interconnect_1x4_S2_BRESP   : std_logic_vector(1 downto 0);
-signal axi_lite_interconnect_1x4_S2_BVALID  : std_logic;
-signal axi_lite_interconnect_1x4_S2_BREADY  : std_logic;
-signal axi_lite_interconnect_1x4_S2_ARADDR  : std_logic_vector(G_ADDR_WIDTH-1 downto 0);
-signal axi_lite_interconnect_1x4_S2_ARVALID : std_logic;
-signal axi_lite_interconnect_1x4_S2_ARREADY : std_logic;
-signal axi_lite_interconnect_1x4_S2_RDATA   : std_logic_vector(G_DATA_WIDTH-1 downto 0);
-signal axi_lite_interconnect_1x4_S2_RRESP   : std_logic_vector(1 downto 0);
-signal axi_lite_interconnect_1x4_S2_RVALID  : std_logic;
-signal axi_lite_interconnect_1x4_S2_RREADY  : std_logic;
-
--- Slave 3 
-signal axi_lite_interconnect_1x4_S3_AWADDR  : std_logic_vector(G_ADDR_WIDTH-1 downto 0);
-signal axi_lite_interconnect_1x4_S3_AWVALID : std_logic;
-signal axi_lite_interconnect_1x4_S3_AWREADY : std_logic;
-signal axi_lite_interconnect_1x4_S3_WDATA   : std_logic_vector(G_DATA_WIDTH-1 downto 0);
-signal axi_lite_interconnect_1x4_S3_WSTRB   : std_logic_vector((G_DATA_WIDTH/8)-1 downto 0);
-signal axi_lite_interconnect_1x4_S3_WVALID  : std_logic;
-signal axi_lite_interconnect_1x4_S3_WREADY  : std_logic;
-signal axi_lite_interconnect_1x4_S3_BRESP   : std_logic_vector(1 downto 0);
-signal axi_lite_interconnect_1x4_S3_BVALID  : std_logic;
-signal axi_lite_interconnect_1x4_S3_BREADY  : std_logic;
-signal axi_lite_interconnect_1x4_S3_ARADDR  : std_logic_vector(G_ADDR_WIDTH-1 downto 0);
-signal axi_lite_interconnect_1x4_S3_ARVALID : std_logic;
-signal axi_lite_interconnect_1x4_S3_ARREADY : std_logic;
-signal axi_lite_interconnect_1x4_S3_RDATA   : std_logic_vector(G_DATA_WIDTH-1 downto 0);
-signal axi_lite_interconnect_1x4_S3_RRESP   : std_logic_vector(1 downto 0);
-signal axi_lite_interconnect_1x4_S3_RVALID  : std_logic;
-signal axi_lite_interconnect_1x4_S3_RREADY  : std_logic;
+constant axi_uart_SYS_FREQ_c : natural := G_SYS_FREQ;
+constant axi_uart_BAUDRATE_c : natural := G_BAUDRATE;
+constant axi_uart_TX_DEPTH_c : natural := G_TX_DEPTH;
+constant axi_uart_RX_DEPTH_c : natural := G_RX_DEPTH;
 
 -- AXI RAM 
 signal axi_ram_mem_axi_awvalid : std_logic;
@@ -251,151 +248,126 @@ signal register_bank_wr_en : std_logic_vector(C_DEPTH-1 downto 0);
 signal register_bank_rd    : reg_bank_t;
 
 begin
+    assert G_ADDR_WIDTH = 32 and G_DATA_WIDTH = 32
+        report "axi_lite_interconnect requires 32-bit address/data" severity failure;
 
 -----------------------------------------------------------
---      AXI LITE INTECONNECT
+-- AXI-Lite interconnect: 2 initiators, 4 targets
 -----------------------------------------------------------
-
--- Instantiation
-u_axi_lite_interconnect_1x4 : entity work.axi_lite_interconnect_1x4
+u_axi_lite_interconnect : entity work.axi_lite_interconnect(rtl)
     generic map (
-        G_ADDR_WIDTH => G_ADDR_WIDTH,
-        G_DATA_WIDTH => G_DATA_WIDTH,
-        G_BASE0      => axi_lite_interconnect_1x4_BASE0_c,
-        G_LIMIT0     => axi_lite_interconnect_1x4_LIMIT0_c,
-        G_BASE1      => axi_lite_interconnect_1x4_BASE1_c,
-        G_LIMIT1     => axi_lite_interconnect_1x4_LIMIT1_c,
-        G_BASE2      => axi_lite_interconnect_1x4_BASE2_c,
-        G_LIMIT2     => axi_lite_interconnect_1x4_LIMIT2_c,
-        G_BASE3      => axi_lite_interconnect_1x4_BASE3_c,
-        G_LIMIT3     => axi_lite_interconnect_1x4_LIMIT3_c
+        use_async_reset    => false,
+        use_sync_reset     => true,
+        sync_reset_active  => '0',
+        nb_slave_ports     => C_NB_MASTERS,
+        nb_master_ports    => C_NB_SLAVES,
+        addr_start         => C_ADDR_START,
+        addr_end           => C_ADDR_END,
+        addr_offset        => C_ADDR_OFFSET
     )
     port map (
-        clk       => clk,
-        resetn    => resetn,
-        -- Master
-        M_AWADDR  => mem_axi_awaddr,
-        M_AWVALID => mem_axi_awvalid,
-        M_AWREADY => mem_axi_awready,
-        M_WDATA   => mem_axi_wdata,
-        M_WSTRB   => mem_axi_wstrb,
-        M_WVALID  => mem_axi_wvalid,
-        M_WREADY  => mem_axi_wready,
-        M_BRESP   => axi_lite_interconnect_1x4_M_BRESP,
-        M_BVALID  => mem_axi_bvalid,
-        M_BREADY  => mem_axi_bready,
-        M_ARADDR  => mem_axi_araddr,
-        M_ARVALID => mem_axi_arvalid,
-        M_ARREADY => mem_axi_arready,
-        M_RDATA   => mem_axi_rdata,
-        M_RRESP   => axi_lite_interconnect_1x4_M_RRESP,
-        M_RVALID  => mem_axi_rvalid,
-        M_RREADY  => mem_axi_rready,
-        -- Slave 0
-        S0_AWADDR  => axi_lite_interconnect_1x4_S0_AWADDR,
-        S0_AWVALID => axi_lite_interconnect_1x4_S0_AWVALID,
-        S0_AWREADY => axi_lite_interconnect_1x4_S0_AWREADY,
-        S0_WDATA   => axi_lite_interconnect_1x4_S0_WDATA,
-        S0_WSTRB   => axi_lite_interconnect_1x4_S0_WSTRB,
-        S0_WVALID  => axi_lite_interconnect_1x4_S0_WVALID,
-        S0_WREADY  => axi_lite_interconnect_1x4_S0_WREADY,
-        S0_BRESP   => axi_lite_interconnect_1x4_S0_BRESP,
-        S0_BVALID  => axi_lite_interconnect_1x4_S0_BVALID,
-        S0_BREADY  => axi_lite_interconnect_1x4_S0_BREADY,
-        S0_ARADDR  => axi_lite_interconnect_1x4_S0_ARADDR,
-        S0_ARVALID => axi_lite_interconnect_1x4_S0_ARVALID,
-        S0_ARREADY => axi_lite_interconnect_1x4_S0_ARREADY,
-        S0_RDATA   => axi_lite_interconnect_1x4_S0_RDATA,
-        S0_RRESP   => axi_lite_interconnect_1x4_S0_RRESP,
-        S0_RVALID  => axi_lite_interconnect_1x4_S0_RVALID,
-        S0_RREADY  => axi_lite_interconnect_1x4_S0_RREADY,
-        -- Slave 1
-        S1_AWADDR  => axi_lite_interconnect_1x4_S1_AWADDR,
-        S1_AWVALID => axi_lite_interconnect_1x4_S1_AWVALID,
-        S1_AWREADY => axi_lite_interconnect_1x4_S1_AWREADY,
-        S1_WDATA   => axi_lite_interconnect_1x4_S1_WDATA,
-        S1_WSTRB   => axi_lite_interconnect_1x4_S1_WSTRB,
-        S1_WVALID  => axi_lite_interconnect_1x4_S1_WVALID,
-        S1_WREADY  => axi_lite_interconnect_1x4_S1_WREADY,
-        S1_BRESP   => axi_lite_interconnect_1x4_S1_BRESP,
-        S1_BVALID  => axi_lite_interconnect_1x4_S1_BVALID,
-        S1_BREADY  => axi_lite_interconnect_1x4_S1_BREADY,
-        S1_ARADDR  => axi_lite_interconnect_1x4_S1_ARADDR,
-        S1_ARVALID => axi_lite_interconnect_1x4_S1_ARVALID,
-        S1_ARREADY => axi_lite_interconnect_1x4_S1_ARREADY,
-        S1_RDATA   => axi_lite_interconnect_1x4_S1_RDATA,
-        S1_RRESP   => axi_lite_interconnect_1x4_S1_RRESP,
-        S1_RVALID  => axi_lite_interconnect_1x4_S1_RVALID,
-        S1_RREADY  => axi_lite_interconnect_1x4_S1_RREADY,
-        -- Slave 2
-        S2_AWADDR  => axi_lite_interconnect_1x4_S2_AWADDR,
-        S2_AWVALID => axi_lite_interconnect_1x4_S2_AWVALID,
-        S2_AWREADY => axi_lite_interconnect_1x4_S2_AWREADY,
-        S2_WDATA   => axi_lite_interconnect_1x4_S2_WDATA,
-        S2_WSTRB   => axi_lite_interconnect_1x4_S2_WSTRB,
-        S2_WVALID  => axi_lite_interconnect_1x4_S2_WVALID,
-        S2_WREADY  => axi_lite_interconnect_1x4_S2_WREADY,
-        S2_BRESP   => axi_lite_interconnect_1x4_S2_BRESP,
-        S2_BVALID  => axi_lite_interconnect_1x4_S2_BVALID,
-        S2_BREADY  => axi_lite_interconnect_1x4_S2_BREADY,
-        S2_ARADDR  => axi_lite_interconnect_1x4_S2_ARADDR,
-        S2_ARVALID => axi_lite_interconnect_1x4_S2_ARVALID,
-        S2_ARREADY => axi_lite_interconnect_1x4_S2_ARREADY,
-        S2_RDATA   => axi_lite_interconnect_1x4_S2_RDATA,
-        S2_RRESP   => axi_lite_interconnect_1x4_S2_RRESP,
-        S2_RVALID  => axi_lite_interconnect_1x4_S2_RVALID,
-        S2_RREADY  => axi_lite_interconnect_1x4_S2_RREADY,
-        -- Slave 3
-        S3_AWADDR  => axi_lite_interconnect_1x4_S3_AWADDR,
-        S3_AWVALID => axi_lite_interconnect_1x4_S3_AWVALID,
-        S3_AWREADY => axi_lite_interconnect_1x4_S3_AWREADY,
-        S3_WDATA   => axi_lite_interconnect_1x4_S3_WDATA,
-        S3_WSTRB   => axi_lite_interconnect_1x4_S3_WSTRB,
-        S3_WVALID  => axi_lite_interconnect_1x4_S3_WVALID,
-        S3_WREADY  => axi_lite_interconnect_1x4_S3_WREADY,
-        S3_BRESP   => axi_lite_interconnect_1x4_S3_BRESP,
-        S3_BVALID  => axi_lite_interconnect_1x4_S3_BVALID,
-        S3_BREADY  => axi_lite_interconnect_1x4_S3_BREADY,
-        S3_ARADDR  => axi_lite_interconnect_1x4_S3_ARADDR,
-        S3_ARVALID => axi_lite_interconnect_1x4_S3_ARVALID,
-        S3_ARREADY => axi_lite_interconnect_1x4_S3_ARREADY,
-        S3_RDATA   => axi_lite_interconnect_1x4_S3_RDATA,
-        S3_RRESP   => axi_lite_interconnect_1x4_S3_RRESP,
-        S3_RVALID  => axi_lite_interconnect_1x4_S3_RVALID,
-        S3_RREADY  => axi_lite_interconnect_1x4_S3_RREADY
+        clock       => clk,
+        async_reset => '0',
+        sync_reset  => resetn,
+        s_axi_awvalid => ic_s_awvalid,
+        s_axi_awready => ic_s_awready,
+        s_axi_awaddr => ic_s_awaddr,
+        s_axi_wvalid => ic_s_wvalid,
+        s_axi_wready => ic_s_wready,
+        s_axi_wdata => ic_s_wdata,
+        s_axi_wstrb => ic_s_wstrb,
+        s_axi_bvalid => ic_s_bvalid,
+        s_axi_bready => ic_s_bready,
+        s_axi_bresp => ic_s_bresp,
+        s_axi_arvalid => ic_s_arvalid,
+        s_axi_arready => ic_s_arready,
+        s_axi_araddr => ic_s_araddr,
+        s_axi_rvalid => ic_s_rvalid,
+        s_axi_rready => ic_s_rready,
+        s_axi_rdata => ic_s_rdata,
+        s_axi_rresp => ic_s_rresp,
+        m_axi_awvalid => ic_m_awvalid,
+        m_axi_awready => ic_m_awready,
+        m_axi_awaddr => ic_m_awaddr,
+        m_axi_wvalid => ic_m_wvalid,
+        m_axi_wready => ic_m_wready,
+        m_axi_wdata => ic_m_wdata,
+        m_axi_wstrb => ic_m_wstrb,
+        m_axi_bvalid => ic_m_bvalid,
+        m_axi_bready => ic_m_bready,
+        m_axi_bresp => ic_m_bresp,
+        m_axi_arvalid => ic_m_arvalid,
+        m_axi_arready => ic_m_arready,
+        m_axi_araddr => ic_m_araddr,
+        m_axi_rvalid => ic_m_rvalid,
+        m_axi_rready => ic_m_rready,
+        m_axi_rdata => ic_m_rdata,
+        m_axi_rresp => ic_m_rresp
     );
 
-mem_axi_bresp <= axi_lite_interconnect_1x4_M_BRESP;
-mem_axi_rresp <= axi_lite_interconnect_1x4_M_RRESP;
+ic_s_awvalid(0) <= cpu_axi_awvalid;
+cpu_axi_awready <= ic_s_awready(0);
+ic_s_awaddr(0) <= cpu_axi_awaddr;
+ic_s_wvalid(0) <= cpu_axi_wvalid;
+cpu_axi_wready <= ic_s_wready(0);
+ic_s_wdata(0) <= cpu_axi_wdata;
+ic_s_wstrb(0) <= cpu_axi_wstrb;
+cpu_axi_bvalid <= ic_s_bvalid(0);
+ic_s_bready(0) <= cpu_axi_bready;
+cpu_axi_bresp <= ic_s_bresp(0);
+ic_s_arvalid(0) <= cpu_axi_arvalid;
+cpu_axi_arready <= ic_s_arready(0);
+ic_s_araddr(0) <= cpu_axi_araddr;
+cpu_axi_rvalid <= ic_s_rvalid(0);
+ic_s_rready(0) <= cpu_axi_rready;
+cpu_axi_rdata <= ic_s_rdata(0);
+cpu_axi_rresp <= ic_s_rresp(0);
+ic_s_awvalid(1) <= ext_axi_awvalid;
+ext_axi_awready <= ic_s_awready(1);
+ic_s_awaddr(1) <= ext_axi_awaddr;
+ic_s_wvalid(1) <= ext_axi_wvalid;
+ext_axi_wready <= ic_s_wready(1);
+ic_s_wdata(1) <= ext_axi_wdata;
+ic_s_wstrb(1) <= ext_axi_wstrb;
+ext_axi_bvalid <= ic_s_bvalid(1);
+ic_s_bready(1) <= ext_axi_bready;
+ext_axi_bresp <= ic_s_bresp(1);
+ic_s_arvalid(1) <= ext_axi_arvalid;
+ext_axi_arready <= ic_s_arready(1);
+ic_s_araddr(1) <= ext_axi_araddr;
+ext_axi_rvalid <= ic_s_rvalid(1);
+ic_s_rready(1) <= ext_axi_rready;
+ext_axi_rdata <= ic_s_rdata(1);
+ext_axi_rresp <= ic_s_rresp(1);
 
 -----------------------------------------------------------
 --      AXI RAM
 -----------------------------------------------------------
 
 -- AXI RAM <-> Interconnect bindings (slave 0)
-axi_ram_mem_axi_awvalid <= axi_lite_interconnect_1x4_S0_AWVALID;
-axi_lite_interconnect_1x4_S0_AWREADY <= axi_ram_mem_axi_awready;
-axi_ram_mem_axi_awaddr <= axi_lite_interconnect_1x4_S0_AWADDR;
+axi_ram_mem_axi_awvalid <= ic_m_awvalid(0);
+ic_m_awready(0) <= axi_ram_mem_axi_awready;
+axi_ram_mem_axi_awaddr <= ic_m_awaddr(0);
 axi_ram_mem_axi_awprot <= (others => '0');
 
-axi_ram_mem_axi_wvalid <= axi_lite_interconnect_1x4_S0_WVALID;
-axi_lite_interconnect_1x4_S0_WREADY <= axi_ram_mem_axi_wready;
-axi_ram_mem_axi_wdata <= axi_lite_interconnect_1x4_S0_WDATA;
-axi_ram_mem_axi_wstrb <= axi_lite_interconnect_1x4_S0_WSTRB;
+axi_ram_mem_axi_wvalid <= ic_m_wvalid(0);
+ic_m_wready(0) <= axi_ram_mem_axi_wready;
+axi_ram_mem_axi_wdata <= ic_m_wdata(0);
+axi_ram_mem_axi_wstrb <= ic_m_wstrb(0);
 
-axi_lite_interconnect_1x4_S0_BVALID <= axi_ram_mem_axi_bvalid;
-axi_ram_mem_axi_bready <= axi_lite_interconnect_1x4_S0_BREADY;
-axi_lite_interconnect_1x4_S0_BRESP <= (others => '0');
+ic_m_bvalid(0) <= axi_ram_mem_axi_bvalid;
+axi_ram_mem_axi_bready <= ic_m_bready(0);
+ic_m_bresp(0) <= (others => '0');
 
-axi_ram_mem_axi_arvalid <= axi_lite_interconnect_1x4_S0_ARVALID;
-axi_lite_interconnect_1x4_S0_ARREADY <= axi_ram_mem_axi_arready;
-axi_ram_mem_axi_araddr <= axi_lite_interconnect_1x4_S0_ARADDR;
+axi_ram_mem_axi_arvalid <= ic_m_arvalid(0);
+ic_m_arready(0) <= axi_ram_mem_axi_arready;
+axi_ram_mem_axi_araddr <= ic_m_araddr(0);
 axi_ram_mem_axi_arprot <= (others => '0');
 
-axi_lite_interconnect_1x4_S0_RVALID <= axi_ram_mem_axi_rvalid;
-axi_ram_mem_axi_rready <= axi_lite_interconnect_1x4_S0_RREADY;
-axi_lite_interconnect_1x4_S0_RDATA <= axi_ram_mem_axi_rdata;
-axi_lite_interconnect_1x4_S0_RRESP <= (others => '0');
+ic_m_rvalid(0) <= axi_ram_mem_axi_rvalid;
+axi_ram_mem_axi_rready <= ic_m_rready(0);
+ic_m_rdata(0) <= axi_ram_mem_axi_rdata;
+ic_m_rresp(0) <= (others => '0');
 
 -- AXI RAM instantiation
 u_axi_ram : entity work.axi_ram
@@ -435,31 +407,31 @@ u_axi_ram : entity work.axi_ram
 -- AXI UART <-> Interconnect bindings (slave 1) 
 
 -- Write address channel
-axi_uart_AWADDR  <= axi_lite_interconnect_1x4_S1_AWADDR;
-axi_uart_AWVALID <= axi_lite_interconnect_1x4_S1_AWVALID;
-axi_lite_interconnect_1x4_S1_AWREADY <= axi_uart_AWREADY;
+axi_uart_AWADDR  <= ic_m_awaddr(1);
+axi_uart_AWVALID <= ic_m_awvalid(1);
+ic_m_awready(1) <= axi_uart_AWREADY;
 
 -- Write data channel
-axi_uart_WDATA   <= axi_lite_interconnect_1x4_S1_WDATA;
-axi_uart_WSTRB   <= axi_lite_interconnect_1x4_S1_WSTRB(3 downto 0);
-axi_uart_WVALID  <= axi_lite_interconnect_1x4_S1_WVALID;
-axi_lite_interconnect_1x4_S1_WREADY <= axi_uart_WREADY;
+axi_uart_WDATA   <= ic_m_wdata(1);
+axi_uart_WSTRB   <= ic_m_wstrb(1)(3 downto 0);
+axi_uart_WVALID  <= ic_m_wvalid(1);
+ic_m_wready(1) <= axi_uart_WREADY;
 
 -- Write response channel
-axi_lite_interconnect_1x4_S1_BRESP  <= axi_uart_BRESP;
-axi_lite_interconnect_1x4_S1_BVALID <= axi_uart_BVALID;
-axi_uart_BREADY <= axi_lite_interconnect_1x4_S1_BREADY;
+ic_m_bresp(1)  <= axi_uart_BRESP;
+ic_m_bvalid(1) <= axi_uart_BVALID;
+axi_uart_BREADY <= ic_m_bready(1);
 
 -- Read address channel
-axi_uart_ARADDR  <= axi_lite_interconnect_1x4_S1_ARADDR;
-axi_uart_ARVALID <= axi_lite_interconnect_1x4_S1_ARVALID;
-axi_lite_interconnect_1x4_S1_ARREADY <= axi_uart_ARREADY;
+axi_uart_ARADDR  <= ic_m_araddr(1);
+axi_uart_ARVALID <= ic_m_arvalid(1);
+ic_m_arready(1) <= axi_uart_ARREADY;
 
 -- Read data channel
-axi_lite_interconnect_1x4_S1_RDATA  <= axi_uart_RDATA;
-axi_lite_interconnect_1x4_S1_RRESP  <= axi_uart_RRESP;
-axi_lite_interconnect_1x4_S1_RVALID <= axi_uart_RVALID;
-axi_uart_RREADY <= axi_lite_interconnect_1x4_S1_RREADY;
+ic_m_rdata(1)  <= axi_uart_RDATA;
+ic_m_rresp(1)  <= axi_uart_RRESP;
+ic_m_rvalid(1) <= axi_uart_RVALID;
+axi_uart_RREADY <= ic_m_rready(1);
 
 -- UART pins
 uart_tx <= axi_uart_uart_tx;
@@ -506,33 +478,33 @@ u_axi_uart : entity work.axi_uart
 
     -- AXI GPIO <-> Interconnect bindings (slave 2)
     -- Write address channel
-    axi_lite_interconnect_1x4_S2_AWREADY <= axi_gpio_awready;
-    axi_gpio_awaddr  <= axi_lite_interconnect_1x4_S2_AWADDR;
+    ic_m_awready(2) <= axi_gpio_awready;
+    axi_gpio_awaddr  <= ic_m_awaddr(2);
     axi_gpio_awprot  <= (others => '0');
-    axi_gpio_awvalid <= axi_lite_interconnect_1x4_S2_AWVALID;
+    axi_gpio_awvalid <= ic_m_awvalid(2);
 
     -- Write data channel
-    axi_lite_interconnect_1x4_S2_WREADY <= axi_gpio_wready;
-    axi_gpio_wdata  <= axi_lite_interconnect_1x4_S2_WDATA;
-    axi_gpio_wstrb  <= axi_lite_interconnect_1x4_S2_WSTRB;
-    axi_gpio_wvalid <= axi_lite_interconnect_1x4_S2_WVALID;
+    ic_m_wready(2) <= axi_gpio_wready;
+    axi_gpio_wdata  <= ic_m_wdata(2);
+    axi_gpio_wstrb  <= ic_m_wstrb(2);
+    axi_gpio_wvalid <= ic_m_wvalid(2);
 
     -- Write response channel
-    axi_lite_interconnect_1x4_S2_BRESP  <= axi_gpio_bresp;
-    axi_lite_interconnect_1x4_S2_BVALID <= axi_gpio_bvalid;
-    axi_gpio_bready <= axi_lite_interconnect_1x4_S2_BREADY;
+    ic_m_bresp(2)  <= axi_gpio_bresp;
+    ic_m_bvalid(2) <= axi_gpio_bvalid;
+    axi_gpio_bready <= ic_m_bready(2);
 
     -- Read address channel
-    axi_lite_interconnect_1x4_S2_ARREADY <= axi_gpio_arready;
-    axi_gpio_araddr  <= axi_lite_interconnect_1x4_S2_ARADDR;
+    ic_m_arready(2) <= axi_gpio_arready;
+    axi_gpio_araddr  <= ic_m_araddr(2);
     axi_gpio_arprot  <= (others => '0');
-    axi_gpio_arvalid <= axi_lite_interconnect_1x4_S2_ARVALID;
+    axi_gpio_arvalid <= ic_m_arvalid(2);
 
     -- Read data channel
-    axi_lite_interconnect_1x4_S2_RDATA  <= axi_gpio_rdata;
-    axi_lite_interconnect_1x4_S2_RRESP  <= axi_gpio_rresp;
-    axi_lite_interconnect_1x4_S2_RVALID <= axi_gpio_rvalid;
-    axi_gpio_rready <= axi_lite_interconnect_1x4_S2_RREADY;
+    ic_m_rdata(2)  <= axi_gpio_rdata;
+    ic_m_rresp(2)  <= axi_gpio_rresp;
+    ic_m_rvalid(2) <= axi_gpio_rvalid;
+    axi_gpio_rready <= ic_m_rready(2);
 
     -- AXI GPIO instantiation
     u_axi_gpio : entity work.axi_gpio
@@ -571,27 +543,30 @@ gpio_out          <= axi_gpio_gpio_out;
     -----------------------------------------------------------
 
     -- AXI Slave Reg Bank <-> Interconnect bindings (slave 3)
-    axi_lite_interconnect_1x4_S3_AWREADY <= axi_slave_reg_bank_awready;
-    axi_slave_reg_bank_awvalid <= axi_lite_interconnect_1x4_S3_AWVALID;
-    axi_slave_reg_bank_awaddr  <= axi_lite_interconnect_1x4_S3_AWADDR;
+    ic_m_awready(3) <= axi_slave_reg_bank_awready;
+    axi_slave_reg_bank_awvalid <= ic_m_awvalid(3);
+    axi_slave_reg_bank_awaddr  <= ic_m_awaddr(3);
 
-    axi_lite_interconnect_1x4_S3_WREADY <= axi_slave_reg_bank_wready;
-    axi_slave_reg_bank_wvalid <= axi_lite_interconnect_1x4_S3_WVALID;
-    axi_slave_reg_bank_wdata  <= axi_lite_interconnect_1x4_S3_WDATA;
-    axi_slave_reg_bank_wstrb  <= axi_lite_interconnect_1x4_S3_WSTRB;
+    ic_m_wready(3) <= axi_slave_reg_bank_wready;
+    axi_slave_reg_bank_wvalid <= ic_m_wvalid(3);
+    axi_slave_reg_bank_wdata  <= ic_m_wdata(3);
+    axi_slave_reg_bank_wstrb  <= ic_m_wstrb(3);
 
-    axi_lite_interconnect_1x4_S3_BVALID <= axi_slave_reg_bank_bvalid;
-    axi_slave_reg_bank_bready <= axi_lite_interconnect_1x4_S3_BREADY;
-    axi_lite_interconnect_1x4_S3_BRESP  <= (others => '0');
+    ic_m_bvalid(3) <= axi_slave_reg_bank_bvalid;
+    axi_slave_reg_bank_bready <= ic_m_bready(3);
+    ic_m_bresp(3)  <= (others => '0');
 
-    axi_slave_reg_bank_arvalid <= axi_lite_interconnect_1x4_S3_ARVALID;
-    axi_lite_interconnect_1x4_S3_ARREADY <= axi_slave_reg_bank_arready;
-    axi_slave_reg_bank_araddr  <= axi_lite_interconnect_1x4_S3_ARADDR;
+    axi_slave_reg_bank_arvalid <= ic_m_arvalid(3);
+    ic_m_arready(3) <= axi_slave_reg_bank_arready;
+    axi_slave_reg_bank_araddr  <= ic_m_araddr(3);
 
-    axi_lite_interconnect_1x4_S3_RVALID <= axi_slave_reg_bank_rvalid;
-    axi_slave_reg_bank_rready <= axi_lite_interconnect_1x4_S3_RREADY;
-    axi_lite_interconnect_1x4_S3_RDATA  <= axi_slave_reg_bank_rdata;
-    axi_lite_interconnect_1x4_S3_RRESP  <= (others => '0');
+    ic_m_rvalid(3) <= axi_slave_reg_bank_rvalid;
+    axi_slave_reg_bank_rready <= ic_m_rready(3);
+    ic_m_rdata(3)  <= axi_slave_reg_bank_rdata;
+    ic_m_rresp(3)  <= (others => '0');
+
+    axi_slave_reg_bank_awprot <= (others => '0');
+    axi_slave_reg_bank_arprot <= (others => '0');
 
     u_axi_slave_reg_bank : entity work.axi_slave_reg_bank
         generic map (

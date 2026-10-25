@@ -61,30 +61,53 @@ constant bus_handle : bus_master_t := new_bus(data_length => wdata'length,
 -- Reset
 signal resetn : std_logic := '0';
 
--- AXI SoC Subsystem interface signals (prefixed)
-signal axi_soc_subsystem_mem_axi_awvalid : std_logic;
-signal axi_soc_subsystem_mem_axi_awready : std_logic;
-signal axi_soc_subsystem_mem_axi_awaddr  : std_logic_vector(G_ADDR_WIDTH-1 downto 0);
-signal axi_soc_subsystem_mem_axi_awprot  : std_logic_vector(2 downto 0) := (others => '0');
-signal axi_soc_subsystem_mem_axi_wvalid  : std_logic;
-signal axi_soc_subsystem_mem_axi_wready  : std_logic;
-signal axi_soc_subsystem_mem_axi_wdata   : std_logic_vector(G_DATA_WIDTH-1 downto 0);
-signal axi_soc_subsystem_mem_axi_wstrb   : std_logic_vector((G_DATA_WIDTH/8)-1 downto 0);
-signal axi_soc_subsystem_mem_axi_bvalid  : std_logic;
-signal axi_soc_subsystem_mem_axi_bready  : std_logic;
-signal axi_soc_subsystem_mem_axi_arvalid : std_logic;
-signal axi_soc_subsystem_mem_axi_arready : std_logic;
-signal axi_soc_subsystem_mem_axi_araddr  : std_logic_vector(G_ADDR_WIDTH-1 downto 0);
-signal axi_soc_subsystem_mem_axi_arprot  : std_logic_vector(2 downto 0) := (others => '0');
-signal axi_soc_subsystem_mem_axi_rvalid  : std_logic;
-signal axi_soc_subsystem_mem_axi_rready  : std_logic;
-signal axi_soc_subsystem_mem_axi_rdata   : std_logic_vector(G_DATA_WIDTH-1 downto 0);
-signal axi_soc_subsystem_uart_rx         : std_logic := '1';
-signal axi_soc_subsystem_uart_tx         : std_logic;
-signal axi_soc_subsystem_mem_axi_bresp   : std_logic_vector(1 downto 0);
-signal axi_soc_subsystem_mem_axi_rresp   : std_logic_vector(1 downto 0);
-signal axi_soc_subsystem_gpio_in         : std_logic_vector(31 downto 0);
-signal axi_soc_subsystem_gpio_out        : std_logic_vector(31 downto 0); 
+-- CPU AXI-Lite interface: driven by the existing VUnit master
+-- CPU interface
+signal cpu_axi_awvalid : std_logic;
+signal cpu_axi_awready : std_logic;
+signal cpu_axi_awaddr : std_logic_vector(G_ADDR_WIDTH-1 downto 0);
+signal cpu_axi_awprot : std_logic_vector(2 downto 0) := (others => '0');
+signal cpu_axi_wvalid : std_logic;
+signal cpu_axi_wready : std_logic;
+signal cpu_axi_wdata : std_logic_vector(G_DATA_WIDTH-1 downto 0);
+signal cpu_axi_wstrb : std_logic_vector(G_DATA_WIDTH/8-1 downto 0);
+signal cpu_axi_bvalid : std_logic;
+signal cpu_axi_bready : std_logic;
+signal cpu_axi_bresp : std_logic_vector(1 downto 0);
+signal cpu_axi_arvalid : std_logic;
+signal cpu_axi_arready : std_logic;
+signal cpu_axi_araddr : std_logic_vector(G_ADDR_WIDTH-1 downto 0);
+signal cpu_axi_arprot : std_logic_vector(2 downto 0) := (others => '0');
+signal cpu_axi_rvalid : std_logic;
+signal cpu_axi_rready : std_logic;
+signal cpu_axi_rdata : std_logic_vector(G_DATA_WIDTH-1 downto 0);
+signal cpu_axi_rresp : std_logic_vector(1 downto 0);
+
+-- EXT interface
+signal ext_axi_awvalid : std_logic := '0';
+signal ext_axi_awready : std_logic;
+signal ext_axi_awaddr : std_logic_vector(G_ADDR_WIDTH-1 downto 0) := (others => '0');
+signal ext_axi_awprot : std_logic_vector(2 downto 0) := (others => '0');
+signal ext_axi_wvalid : std_logic := '0';
+signal ext_axi_wready : std_logic;
+signal ext_axi_wdata : std_logic_vector(G_DATA_WIDTH-1 downto 0) := (others => '0');
+signal ext_axi_wstrb : std_logic_vector(G_DATA_WIDTH/8-1 downto 0) := (others => '0');
+signal ext_axi_bvalid : std_logic;
+signal ext_axi_bready : std_logic := '0';
+signal ext_axi_bresp : std_logic_vector(1 downto 0);
+signal ext_axi_arvalid : std_logic := '0';
+signal ext_axi_arready : std_logic;
+signal ext_axi_araddr : std_logic_vector(G_ADDR_WIDTH-1 downto 0) := (others => '0');
+signal ext_axi_arprot : std_logic_vector(2 downto 0) := (others => '0');
+signal ext_axi_rvalid : std_logic;
+signal ext_axi_rready : std_logic := '0';
+signal ext_axi_rdata : std_logic_vector(G_DATA_WIDTH-1 downto 0);
+signal ext_axi_rresp : std_logic_vector(1 downto 0);
+
+signal axi_soc_subsystem_uart_rx : std_logic := '1';
+signal axi_soc_subsystem_uart_tx : std_logic;
+signal axi_soc_subsystem_gpio_in  : std_logic_vector(31 downto 0);
+signal axi_soc_subsystem_gpio_out : std_logic_vector(31 downto 0);
 
 -- Checking signal
 signal rx_data                           : std_logic_vector(31 downto 0);
@@ -349,24 +372,24 @@ end process;
 --  0x0000000C	    RX_LEVEL	    Read: RX FIFO fill level
 --  0x00000010	    RESET	        Write: Pulse to reset FIFOs
 
--- Bridge assignments between testbench master signals and subsystem
-axi_soc_subsystem_mem_axi_awvalid <= awvalid;
-awready <= axi_soc_subsystem_mem_axi_awready;
-axi_soc_subsystem_mem_axi_awaddr  <= awaddr;
-axi_soc_subsystem_mem_axi_wvalid  <= wvalid;
-wready  <= axi_soc_subsystem_mem_axi_wready;
-axi_soc_subsystem_mem_axi_wdata   <= wdata;
-axi_soc_subsystem_mem_axi_wstrb   <= wstrb;
-bvalid  <= axi_soc_subsystem_mem_axi_bvalid;
-axi_soc_subsystem_mem_axi_bready  <= bready;
-axi_soc_subsystem_mem_axi_arvalid <= arvalid;
-arready <= axi_soc_subsystem_mem_axi_arready;
-axi_soc_subsystem_mem_axi_araddr  <= araddr;
-rvalid  <= axi_soc_subsystem_mem_axi_rvalid;
-axi_soc_subsystem_mem_axi_rready  <= rready;
-rdata   <= axi_soc_subsystem_mem_axi_rdata;
-bresp <= axi_soc_subsystem_mem_axi_bresp;
-rresp <= axi_soc_subsystem_mem_axi_rresp;
+-- Bridge assignments between VUnit master and CPU AXI-Lite interface
+cpu_axi_awvalid <= awvalid;
+awready <= cpu_axi_awready;
+cpu_axi_awaddr <= awaddr;
+cpu_axi_wvalid <= wvalid;
+wready <= cpu_axi_wready;
+cpu_axi_wdata <= wdata;
+cpu_axi_wstrb <= wstrb;
+bvalid <= cpu_axi_bvalid;
+cpu_axi_bready <= bready;
+bresp <= cpu_axi_bresp;
+cpu_axi_arvalid <= arvalid;
+arready <= cpu_axi_arready;
+cpu_axi_araddr <= araddr;
+rvalid <= cpu_axi_rvalid;
+cpu_axi_rready <= rready;
+rdata <= cpu_axi_rdata;
+rresp <= cpu_axi_rresp;
 
 ----------------------------------------------------------------
 -- AXI SOC SUBSYSTEM
@@ -392,31 +415,50 @@ axi_soc_subsystem_inst : entity work.axi_soc_subsystem
         G_RX_DEPTH   => 16
     )
     port map (
-        clk              => clk,
-        resetn           => resetn,
-        mem_axi_awvalid  => axi_soc_subsystem_mem_axi_awvalid,
-        mem_axi_awready  => axi_soc_subsystem_mem_axi_awready,
-        mem_axi_awaddr   => axi_soc_subsystem_mem_axi_awaddr,
-        mem_axi_awprot   => axi_soc_subsystem_mem_axi_awprot,
-        mem_axi_wvalid   => axi_soc_subsystem_mem_axi_wvalid,
-        mem_axi_wready   => axi_soc_subsystem_mem_axi_wready,
-        mem_axi_wdata    => axi_soc_subsystem_mem_axi_wdata,
-        mem_axi_wstrb    => axi_soc_subsystem_mem_axi_wstrb,
-        mem_axi_bvalid   => axi_soc_subsystem_mem_axi_bvalid,
-        mem_axi_bready   => axi_soc_subsystem_mem_axi_bready,
-        mem_axi_arvalid  => axi_soc_subsystem_mem_axi_arvalid,
-        mem_axi_arready  => axi_soc_subsystem_mem_axi_arready,
-        mem_axi_araddr   => axi_soc_subsystem_mem_axi_araddr,
-        mem_axi_arprot   => axi_soc_subsystem_mem_axi_arprot,
-        mem_axi_rvalid   => axi_soc_subsystem_mem_axi_rvalid,
-        mem_axi_rready   => axi_soc_subsystem_mem_axi_rready,
-        mem_axi_rdata    => axi_soc_subsystem_mem_axi_rdata,
-        mem_axi_bresp    => axi_soc_subsystem_mem_axi_bresp,
-        mem_axi_rresp    => axi_soc_subsystem_mem_axi_rresp, 
-        uart_rx          => axi_soc_subsystem_uart_rx,
-        uart_tx          => axi_soc_subsystem_uart_tx,
-        gpio_in          => axi_soc_subsystem_gpio_in,
-        gpio_out         => axi_soc_subsystem_gpio_out
+        clk => clk,
+        resetn => resetn,
+        cpu_axi_awvalid => cpu_axi_awvalid,
+        cpu_axi_awready => cpu_axi_awready,
+        cpu_axi_awaddr => cpu_axi_awaddr,
+        cpu_axi_awprot => cpu_axi_awprot,
+        cpu_axi_wvalid => cpu_axi_wvalid,
+        cpu_axi_wready => cpu_axi_wready,
+        cpu_axi_wdata => cpu_axi_wdata,
+        cpu_axi_wstrb => cpu_axi_wstrb,
+        cpu_axi_bvalid => cpu_axi_bvalid,
+        cpu_axi_bready => cpu_axi_bready,
+        cpu_axi_bresp => cpu_axi_bresp,
+        cpu_axi_arvalid => cpu_axi_arvalid,
+        cpu_axi_arready => cpu_axi_arready,
+        cpu_axi_araddr => cpu_axi_araddr,
+        cpu_axi_arprot => cpu_axi_arprot,
+        cpu_axi_rvalid => cpu_axi_rvalid,
+        cpu_axi_rready => cpu_axi_rready,
+        cpu_axi_rdata => cpu_axi_rdata,
+        cpu_axi_rresp => cpu_axi_rresp,
+        ext_axi_awvalid => ext_axi_awvalid,
+        ext_axi_awready => ext_axi_awready,
+        ext_axi_awaddr => ext_axi_awaddr,
+        ext_axi_awprot => ext_axi_awprot,
+        ext_axi_wvalid => ext_axi_wvalid,
+        ext_axi_wready => ext_axi_wready,
+        ext_axi_wdata => ext_axi_wdata,
+        ext_axi_wstrb => ext_axi_wstrb,
+        ext_axi_bvalid => ext_axi_bvalid,
+        ext_axi_bready => ext_axi_bready,
+        ext_axi_bresp => ext_axi_bresp,
+        ext_axi_arvalid => ext_axi_arvalid,
+        ext_axi_arready => ext_axi_arready,
+        ext_axi_araddr => ext_axi_araddr,
+        ext_axi_arprot => ext_axi_arprot,
+        ext_axi_rvalid => ext_axi_rvalid,
+        ext_axi_rready => ext_axi_rready,
+        ext_axi_rdata => ext_axi_rdata,
+        ext_axi_rresp => ext_axi_rresp,
+        uart_rx => axi_soc_subsystem_uart_rx,
+        uart_tx => axi_soc_subsystem_uart_tx,
+        gpio_in => axi_soc_subsystem_gpio_in,
+        gpio_out => axi_soc_subsystem_gpio_out
     );
 
 -- UART loopback
