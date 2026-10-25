@@ -1,3 +1,5 @@
+from pathlib import Path
+
 def parse_intel_hex_line(line):
     if not line.startswith(':'):
         return None
@@ -35,33 +37,37 @@ def write_grouped_bytes(byte_list, output_file):
             f.write(" ".join(f"{b:02X}" for b in reversed(group)) + "\n")
 
 if __name__ == "__main__":
-    HEX_FILENAME = "main1.hex"  # Replace with your .hex file path
-    OUTPUT_FILE = r"ram_data.txt"
+    SCRIPT_DIR = Path(__file__).resolve().parent
+
+    HEX_FILENAME = SCRIPT_DIR / "main1.hex"
+    OUTPUT_FILE = SCRIPT_DIR / "ram_data.txt"
+
     VHDL_OUTPUT = "../../src/rams_sp_wf_pkg.vhd"
-    VHDL_DEPTH = 16384  # Configurable constant for RAM depth
+    VHDL_DEPTH = 16384
 
     byte_list = read_hex_file(HEX_FILENAME, mem_size=VHDL_DEPTH)
     write_grouped_bytes(byte_list, OUTPUT_FILE)
+    
     # Write VHDL RAM initialization ? one constant per byte lane
-    with open(VHDL_OUTPUT, "w") as vhdl:
-        vhdl.write("library ieee;\n")
-        vhdl.write("use ieee.std_logic_1164.all;\n")
-        vhdl.write("use ieee.numeric_std.all;\n\n")
-        vhdl.write("package rams_sp_wf_pkg is\n\n")
-        vhdl.write(f"    constant G_DEPTH : integer := {VHDL_DEPTH};\n\n")
-        vhdl.write("    type ram_type is array (G_DEPTH-1 downto 0) of std_logic_vector(7 downto 0);\n\n")
-
-        for lane in range(4):
-            const_name = f"C_RAM_{lane}_INIT"
-            vhdl.write(f"    constant {const_name} : ram_type := (\n")
-            for i in range(VHDL_DEPTH):
-                byte_idx = i * 4 + lane
-                b = byte_list[byte_idx] if byte_idx < len(byte_list) else 0
-                vhdl.write(f'        {i} => x"{b:02X}"')
-                if i < VHDL_DEPTH - 1:
-                    vhdl.write(",\n")
-                else:
-                    vhdl.write("\n")
-            vhdl.write("    );\n\n")
-
-        vhdl.write("end package rams_sp_wf_pkg;\n")
+##    with open(VHDL_OUTPUT, "w") as vhdl:
+##        vhdl.write("library ieee;\n")
+##        vhdl.write("use ieee.std_logic_1164.all;\n")
+##        vhdl.write("use ieee.numeric_std.all;\n\n")
+##        vhdl.write("package rams_sp_wf_pkg is\n\n")
+##        vhdl.write(f"    constant G_DEPTH : integer := {VHDL_DEPTH};\n\n")
+##        vhdl.write("    type ram_type is array (G_DEPTH-1 downto 0) of std_logic_vector(7 downto 0);\n\n")
+##
+##        for lane in range(4):
+##            const_name = f"C_RAM_{lane}_INIT"
+##            vhdl.write(f"    constant {const_name} : ram_type := (\n")
+##            for i in range(VHDL_DEPTH):
+##                byte_idx = i * 4 + lane
+##                b = byte_list[byte_idx] if byte_idx < len(byte_list) else 0
+##                vhdl.write(f'        {i} => x"{b:02X}"')
+##                if i < VHDL_DEPTH - 1:
+##                    vhdl.write(",\n")
+##                else:
+##                    vhdl.write("\n")
+##            vhdl.write("    );\n\n")
+##
+##        vhdl.write("end package rams_sp_wf_pkg;\n")
