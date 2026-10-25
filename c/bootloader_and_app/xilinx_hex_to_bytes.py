@@ -49,25 +49,25 @@ if __name__ == "__main__":
     write_grouped_bytes(byte_list, OUTPUT_FILE)
     
     # Write VHDL RAM initialization ? one constant per byte lane
-##    with open(VHDL_OUTPUT, "w") as vhdl:
-##        vhdl.write("library ieee;\n")
-##        vhdl.write("use ieee.std_logic_1164.all;\n")
-##        vhdl.write("use ieee.numeric_std.all;\n\n")
-##        vhdl.write("package rams_sp_wf_pkg is\n\n")
-##        vhdl.write(f"    constant G_DEPTH : integer := {VHDL_DEPTH};\n\n")
-##        vhdl.write("    type ram_type is array (G_DEPTH-1 downto 0) of std_logic_vector(7 downto 0);\n\n")
-##
-##        for lane in range(4):
-##            const_name = f"C_RAM_{lane}_INIT"
-##            vhdl.write(f"    constant {const_name} : ram_type := (\n")
-##            for i in range(VHDL_DEPTH):
-##                byte_idx = i * 4 + lane
-##                b = byte_list[byte_idx] if byte_idx < len(byte_list) else 0
-##                vhdl.write(f'        {i} => x"{b:02X}"')
-##                if i < VHDL_DEPTH - 1:
-##                    vhdl.write(",\n")
-##                else:
-##                    vhdl.write("\n")
-##            vhdl.write("    );\n\n")
-##
-##        vhdl.write("end package rams_sp_wf_pkg;\n")
+    with open(VHDL_OUTPUT, "w") as vhdl:
+        vhdl.write("library ieee;\n")
+        vhdl.write("use ieee.std_logic_1164.all;\n")
+        vhdl.write("use ieee.numeric_std.all;\n\n")
+        vhdl.write("package rams_sp_wf_pkg is\n\n")
+        vhdl.write(f"    constant G_DEPTH : integer := {VHDL_DEPTH};\n\n")
+        vhdl.write("    type ram_type is array (G_DEPTH-1 downto 0) of std_logic_vector(7 downto 0);\n\n")
+
+        for lane in range(4):
+            const_name = f"C_RAM_{lane}_INIT"
+            vhdl.write(f"    constant {const_name} : ram_type := (\n")
+            for i in range(VHDL_DEPTH):
+                byte_idx = i * 4 + lane
+                b = byte_list[byte_idx] if byte_idx < len(byte_list) else 0
+                vhdl.write(f'        {i} => x"{b:02X}"')
+                if i < VHDL_DEPTH - 1:
+                    vhdl.write(",\n")
+                else:
+                    vhdl.write("\n")
+            vhdl.write("    );\n\n")
+
+        vhdl.write("end package rams_sp_wf_pkg;\n")
