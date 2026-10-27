@@ -4,12 +4,17 @@ use ieee.numeric_std.all;
 
 entity soc is
     generic (
+        USE_ASYNC_RESET    : boolean   := TRUE;
+        USE_SYNC_RESET     : boolean   := TRUE;
+        ASYNC_RESET_ACTIVE : std_logic := '1';
+        SYNC_RESET_ACTIVE  : std_logic := '1';
         G_SYS_FREQ : natural := 100_000_000;
         G_BAUDRATE : natural := 125_000
     );
     port (
         clk         : in std_logic;
-        reset_n     : in std_logic;
+        async_reset : in std_logic;
+        sync_reset  : in std_logic;
         cpu_reset_i : in std_logic := '0';
         uart_rx     : in std_logic;
         uart_tx     : out std_logic;
@@ -48,6 +53,7 @@ end entity;
 architecture rtl of soc is
 
     signal reset : std_logic;
+    signal cpu_sync_reset : std_logic;
     signal gpio_in  : std_logic_vector(31 downto 0);
     signal gpio_out : std_logic_vector(31 downto 0);
 
@@ -72,17 +78,20 @@ architecture rtl of soc is
     signal axi_rready : std_logic;
 
 begin
-    reset <= (not reset_n) or cpu_reset_i;
+    reset <= '1' when (USE_ASYNC_RESET and async_reset = ASYNC_RESET_ACTIVE) or
+                      (USE_SYNC_RESET and (sync_reset = SYNC_RESET_ACTIVE or cpu_reset_i = '1')) else '0';
+    cpu_sync_reset <= SYNC_RESET_ACTIVE when sync_reset = SYNC_RESET_ACTIVE or cpu_reset_i = '1'
+                      else not SYNC_RESET_ACTIVE;
 
     --------------------------------------------------------------------
     -- RISC-V CPU wrapper
     --------------------------------------------------------------------
     riscv_wrapper_inst : entity work.riscv_wrapper
         generic map (
-            use_async_reset    => true,
-            use_sync_reset     => true,
-            async_reset_active => '1',
-            sync_reset_active  => '1',
+            USE_ASYNC_RESET    => USE_ASYNC_RESET,
+            USE_SYNC_RESET     => USE_SYNC_RESET,
+            ASYNC_RESET_ACTIVE => ASYNC_RESET_ACTIVE,
+            SYNC_RESET_ACTIVE  => SYNC_RESET_ACTIVE,
             start_address      => x"00000000",
             enable_multiplier  => true,
             enable_divider     => true
@@ -90,8 +99,8 @@ begin
         port map (
             -- Clock and reset
             clock_i       => clk,
-            async_reset_i => not reset_n,
-            sync_reset_i  => cpu_reset_i,
+            async_reset => async_reset,
+            sync_reset => cpu_sync_reset,
 
             -- CPU control
             stall_i => stall_i,
@@ -135,6 +144,10 @@ begin
 
     axi_soc_subsystem_inst : entity work.axi_soc_subsystem
         generic map (
+            USE_ASYNC_RESET    => USE_ASYNC_RESET,
+            USE_SYNC_RESET     => USE_SYNC_RESET,
+            ASYNC_RESET_ACTIVE => ASYNC_RESET_ACTIVE,
+            SYNC_RESET_ACTIVE  => SYNC_RESET_ACTIVE,
             G_ADDR_WIDTH => 32,
             G_DATA_WIDTH => 32,
             G_BASE0      => x"00000000",
@@ -153,7 +166,9 @@ begin
         )
         port map (
             clk                => clk,
-            resetn             => reset_n,
+            async_reset => async_reset,
+            sync_reset => sync_reset,
+
             cpu_axi_awaddr     => axi_awaddr,
             cpu_axi_awprot     => axi_awprot,
             cpu_axi_awvalid    => axi_awvalid,

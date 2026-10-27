@@ -10,7 +10,7 @@ from pathlib import Path
 # ----------------------------------------------------------------------
 
 COM_PORT = "COM7"
-BAUDRATE = 125000
+BAUDRATE = 250000
 
 APP_BASE = 0x00001000
 

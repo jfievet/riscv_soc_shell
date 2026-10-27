@@ -9,6 +9,10 @@ use work.axi_lite_interconnect_pkg.all;
 
 entity axi_soc_subsystem is
     generic (
+        USE_ASYNC_RESET    : boolean   := TRUE;
+        USE_SYNC_RESET     : boolean   := TRUE;
+        ASYNC_RESET_ACTIVE : std_logic := '1';
+        SYNC_RESET_ACTIVE  : std_logic := '1';
     G_ADDR_WIDTH : positive := 32;
     G_DATA_WIDTH : positive := 32;
 
@@ -33,7 +37,8 @@ entity axi_soc_subsystem is
     );
     port (
         clk            : in  std_logic;                          -- Added clock
-        resetn         : in  std_logic;                          -- Added active-low reset
+        async_reset : in std_logic;
+        sync_reset  : in std_logic;                          -- Added active-low reset
         cpu_axi_awvalid : in  std_logic;
         cpu_axi_awready : out std_logic;
         cpu_axi_awaddr  : in  std_logic_vector(G_ADDR_WIDTH-1 downto 0);
@@ -256,9 +261,10 @@ begin
 -----------------------------------------------------------
 u_axi_lite_interconnect : entity work.axi_lite_interconnect(rtl)
     generic map (
-        use_async_reset    => false,
-        use_sync_reset     => true,
-        sync_reset_active  => '0',
+        USE_ASYNC_RESET    => USE_ASYNC_RESET,
+        USE_SYNC_RESET     => USE_SYNC_RESET,
+        ASYNC_RESET_ACTIVE => ASYNC_RESET_ACTIVE,
+        SYNC_RESET_ACTIVE  => SYNC_RESET_ACTIVE,
         nb_slave_ports     => C_NB_MASTERS,
         nb_master_ports    => C_NB_SLAVES,
         addr_start         => C_ADDR_START,
@@ -267,8 +273,9 @@ u_axi_lite_interconnect : entity work.axi_lite_interconnect(rtl)
     )
     port map (
         clock       => clk,
-        async_reset => '0',
-        sync_reset  => resetn,
+        async_reset => async_reset,
+        sync_reset => sync_reset,
+
         s_axi_awvalid => ic_s_awvalid,
         s_axi_awready => ic_s_awready,
         s_axi_awaddr => ic_s_awaddr,
@@ -372,6 +379,10 @@ ic_m_rresp(0) <= (others => '0');
 -- AXI RAM instantiation
 u_axi_ram : entity work.axi_ram
     generic map (
+        USE_ASYNC_RESET    => USE_ASYNC_RESET,
+        USE_SYNC_RESET     => USE_SYNC_RESET,
+        ASYNC_RESET_ACTIVE => ASYNC_RESET_ACTIVE,
+        SYNC_RESET_ACTIVE  => SYNC_RESET_ACTIVE,
         G_DATA_WIDTH => G_DATA_WIDTH,
         G_ADDR_WIDTH => G_ADDR_WIDTH,
         G_DEPTH      => axi_ram_DEPTH_c,
@@ -379,7 +390,9 @@ u_axi_ram : entity work.axi_ram
     )
     port map (
         clk             => clk,
-        resetn          => resetn,
+        async_reset => async_reset,
+        sync_reset => sync_reset,
+
         mem_axi_awvalid => axi_ram_mem_axi_awvalid,
         mem_axi_awready => axi_ram_mem_axi_awready,
         mem_axi_awaddr  => axi_ram_mem_axi_awaddr,
@@ -442,6 +455,10 @@ axi_uart_uart_rx <= uart_rx;
 ----------------------------------------------------------------
 u_axi_uart : entity work.axi_uart
     generic map (
+        USE_ASYNC_RESET    => USE_ASYNC_RESET,
+        USE_SYNC_RESET     => USE_SYNC_RESET,
+        ASYNC_RESET_ACTIVE => ASYNC_RESET_ACTIVE,
+        SYNC_RESET_ACTIVE  => SYNC_RESET_ACTIVE,
         G_SYS_FREQ => axi_uart_SYS_FREQ_c,
         G_BAUDRATE => axi_uart_BAUDRATE_c,
         G_TX_DEPTH => axi_uart_TX_DEPTH_c,
@@ -449,7 +466,9 @@ u_axi_uart : entity work.axi_uart
     )
     port map (
         ACLK    => clk,
-        ARESETn => resetn,
+        async_reset => async_reset,
+        sync_reset => sync_reset,
+
         AWADDR  => axi_uart_AWADDR,
         AWVALID => axi_uart_AWVALID,
         AWREADY => axi_uart_AWREADY,
@@ -508,9 +527,17 @@ u_axi_uart : entity work.axi_uart
 
     -- AXI GPIO instantiation
     u_axi_gpio : entity work.axi_gpio
+        generic map (
+            USE_ASYNC_RESET    => USE_ASYNC_RESET,
+            USE_SYNC_RESET     => USE_SYNC_RESET,
+            ASYNC_RESET_ACTIVE => ASYNC_RESET_ACTIVE,
+            SYNC_RESET_ACTIVE  => SYNC_RESET_ACTIVE
+        )
         port map (
             s_axi_aclk    => clk,
-            s_axi_aresetn => resetn,
+            async_reset => async_reset,
+            sync_reset => sync_reset,
+
             s_axi_awaddr  => axi_gpio_awaddr,
             s_axi_awprot  => axi_gpio_awprot,
             s_axi_awvalid => axi_gpio_awvalid,
@@ -570,12 +597,18 @@ gpio_out          <= axi_gpio_gpio_out;
 
     u_axi_slave_reg_bank : entity work.axi_slave_reg_bank
         generic map (
+            USE_ASYNC_RESET    => USE_ASYNC_RESET,
+            USE_SYNC_RESET     => USE_SYNC_RESET,
+            ASYNC_RESET_ACTIVE => ASYNC_RESET_ACTIVE,
+            SYNC_RESET_ACTIVE  => SYNC_RESET_ACTIVE,
             G_ADDR_WIDTH => 32,
             G_DATA_WIDTH => 32
         )
         port map (
             clk                 => clk,
-            resetn              => resetn,
+            async_reset => async_reset,
+            sync_reset => sync_reset,
+
             mem_axi_awvalid     => axi_slave_reg_bank_awvalid,
             mem_axi_awready     => axi_slave_reg_bank_awready,
             mem_axi_awaddr      => axi_slave_reg_bank_awaddr,
