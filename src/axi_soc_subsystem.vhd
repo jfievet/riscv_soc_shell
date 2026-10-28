@@ -13,27 +13,27 @@ entity axi_soc_subsystem is
         USE_SYNC_RESET     : boolean   := TRUE;
         ASYNC_RESET_ACTIVE : std_logic := '1';
         SYNC_RESET_ACTIVE  : std_logic := '1';
-    G_ADDR_WIDTH : positive := 32;
-    G_DATA_WIDTH : positive := 32;
+        G_ADDR_WIDTH : positive := 32;
+        G_DATA_WIDTH : positive := 32;
 
-    -- AXI-Lite interconnect address map
-    G_BASE0  : std_logic_vector(32-1 downto 0) := (others => '0');
-    G_LIMIT0 : std_logic_vector(32-1 downto 0) := x"000FFFFF"; -- 64 kB  0x10000 <=> 65536
-    G_BASE1  : std_logic_vector(32-1 downto 0) := x"00100000";
-    G_LIMIT1 : std_logic_vector(32-1 downto 0) := x"001FFFFF";
-    G_BASE2  : std_logic_vector(32-1 downto 0) := x"00200000";
-    G_LIMIT2 : std_logic_vector(32-1 downto 0) := x"002FFFFF";
-    G_BASE3  : std_logic_vector(32-1 downto 0) := x"00300000";
-    G_LIMIT3 : std_logic_vector(32-1 downto 0) := x"003FFFFF";
+        -- AXI-Lite interconnect address map
+        G_BASE0  : std_logic_vector(32-1 downto 0) := (others => '0');
+        G_LIMIT0 : std_logic_vector(32-1 downto 0) := x"000FFFFF"; -- 64 kB  0x10000 <=> 65536
+        G_BASE1  : std_logic_vector(32-1 downto 0) := x"00100000";
+        G_LIMIT1 : std_logic_vector(32-1 downto 0) := x"001FFFFF";
+        G_BASE2  : std_logic_vector(32-1 downto 0) := x"00200000";
+        G_LIMIT2 : std_logic_vector(32-1 downto 0) := x"002FFFFF";
+        G_BASE3  : std_logic_vector(32-1 downto 0) := x"00300000";
+        G_LIMIT3 : std_logic_vector(32-1 downto 0) := x"003FFFFF";
 
-    -- AXI RAM
-    G_RAM_DEPTH : positive := 1024;
+        -- AXI RAM
+        G_RAM_DEPTH : positive := 1024;
 
-    -- AXI UART
-    G_SYS_FREQ : natural := 50_000_000;
-    G_BAUDRATE : natural := 115200;
-    G_TX_DEPTH : natural := 16;
-    G_RX_DEPTH : natural := 16
+        -- AXI UART
+        G_SYS_FREQ : natural := 50_000_000;
+        G_BAUDRATE : natural := 115200;
+        G_TX_DEPTH : natural := 16;
+        G_RX_DEPTH : natural := 16
     );
     port (
         clk            : in  std_logic;                          -- Added clock

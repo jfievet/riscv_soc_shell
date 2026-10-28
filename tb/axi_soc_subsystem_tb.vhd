@@ -398,6 +398,8 @@ rresp <= cpu_axi_rresp;
 -- Instantiation
 axi_soc_subsystem_inst : entity work.axi_soc_subsystem
     generic map (
+        USE_ASYNC_RESET => FALSE,
+        USE_SYNC_RESET => TRUE,
         G_ADDR_WIDTH => 32,
         G_DATA_WIDTH => 32,
         G_BASE0      => (others => '0'),
@@ -416,7 +418,8 @@ axi_soc_subsystem_inst : entity work.axi_soc_subsystem
     )
     port map (
         clk => clk,
-        resetn => resetn,
+        async_reset => not resetn,
+        sync_reset  => not resetn, 
         cpu_axi_awvalid => cpu_axi_awvalid,
         cpu_axi_awready => cpu_axi_awready,
         cpu_axi_awaddr => cpu_axi_awaddr,
