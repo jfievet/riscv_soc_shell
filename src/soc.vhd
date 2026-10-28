@@ -93,8 +93,8 @@ begin
             ASYNC_RESET_ACTIVE => ASYNC_RESET_ACTIVE,
             SYNC_RESET_ACTIVE  => SYNC_RESET_ACTIVE,
             start_address      => x"00000000",
-            enable_multiplier  => true,
-            enable_divider     => true
+            enable_multiplier  => false,
+            enable_divider     => false
         )
         port map (
             -- Clock and reset
