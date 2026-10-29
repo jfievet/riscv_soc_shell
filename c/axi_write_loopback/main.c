@@ -6,6 +6,23 @@
 #include "generated_header.h"
 #include "../common/common_lib.h"
 
+static uint64_t read_elapsed_time(void)
+{
+    volatile uint32_t *reg_freq = (volatile uint32_t *)0x0030000C;
+    volatile uint32_t *reg_low  = (volatile uint32_t *)0x00300010;
+    volatile uint32_t *reg_high = (volatile uint32_t *)0x00300014;
+
+    // Read frequency register first to trigger counter capture
+    uint32_t freq = *reg_freq;
+    (void)freq;
+
+    // Read captured 64-bit counter
+    uint32_t low  = *reg_low;
+    uint32_t high = *reg_high;
+
+    return ((uint64_t)high << 32) | low;
+}
+
 
 int main(void) {
 
@@ -63,20 +80,36 @@ int main(void) {
     gpio_write(0x5);
 
     volatile uint32_t *test_reg = (volatile uint32_t *)0x300008;
+    volatile uint32_t *freq_reg = (volatile uint32_t *)0x30000C;
+    uint32_t sys_freq = *freq_reg;
+    dprint("FPGA system frequency: %u Hz\r\n", (unsigned int)sys_freq);
 
     while (1) {
-        int i;
-        
-        // 100e6 loop @ 100 MHZ riscV takes 33 sec approximatly
 
-        /* First 100e6 writes */
-        dprint("Start First 100e6 writes\r\n");
-        for (i = 0; i < 100e6; i++) {
+        uint64_t start_time;
+        uint64_t end_time;
+        uint64_t delta_cycles;
+
+        // Capture start time
+        start_time = read_elapsed_time();
+
+        dprint("Start 100e6 writes\r\n");
+
+        // Perform 100 million writes
+        for (uint32_t i = 0; i < 100000000U; i++) {
             *test_reg = 0x12345678;
         }
 
-        dprint("First 100e6 done\r\n");
+        // Capture end time
+        end_time = read_elapsed_time();
 
+        // Calculate elapsed cycles
+        delta_cycles = end_time - start_time;
+
+        dprint("100e6 writes done\r\n");
+
+        dprint("Elapsed cycles: %llu\r\n",
+            (unsigned long long)delta_cycles);
     }
 
     return 0;

@@ -251,6 +251,10 @@ signal axi_slave_reg_bank_rdata   : std_logic_vector(32-1 downto 0);
 signal register_bank_wr    : reg_bank_t;
 signal register_bank_wr_en : std_logic_vector(C_DEPTH-1 downto 0);
 signal register_bank_rd    : reg_bank_t;
+signal register_bank_rd_en : std_logic_vector(C_DEPTH-1 downto 0);
+
+-- Time enlpased signal
+signal elapsed_time : std_logic_vector(63 downto 0);
 
 begin
     assert G_ADDR_WIDTH = 32 and G_DATA_WIDTH = 32
@@ -628,22 +632,56 @@ gpio_out          <= axi_gpio_gpio_out;
             mem_axi_rdata       => axi_slave_reg_bank_rdata,
             register_bank_wr    => register_bank_wr,
             register_bank_wr_en => register_bank_wr_en,
-            register_bank_rd    => register_bank_rd
+            register_bank_rd    => register_bank_rd,
+            register_bank_rd_en => register_bank_rd_en
         );
 
         -- Store date and time constants in the first register_bank_rd entry
+
+        -- AXI 0x00
         register_bank_rd(0)(7 downto 0)     <= C_DAY_HEX;
         register_bank_rd(0)(15 downto 8)    <= C_MONTH_HEX;
         register_bank_rd(0)(31 downto 16)   <= C_YEAR_HEX;
+
+        -- AXI 0x04
         register_bank_rd(1)(7 downto 0)     <= C_HOUR_HEX;
         register_bank_rd(1)(15 downto 8)    <= C_MINUTE_HEX;
         register_bank_rd(1)(23 downto 16)   <= C_SECOND_HEX;
-        register_bank_rd(1)(31 downto 24)   <= (others=>'0');
+        register_bank_rd(1)(31 downto 24)   <= (others => '0');
+
+        -- AXI 0x08
         register_bank_rd(2)                 <= register_bank_wr(2); -- Test loopback
+
+
+        -- AXI 0x0C
+        register_bank_rd(3)                 <= std_logic_vector(to_unsigned(G_SYS_FREQ,32));
+
+        -- AXI 0x10
+        register_bank_rd(4)                 <= elapsed_time(31 downto 0);
+
+        -- AXI 0x14
+        register_bank_rd(5)                 <= elapsed_time(63 downto 32);
+
         ---- Connect write register bank to read register bank
         --for i in register_bank_rd'range loop
         --    register_bank_rd(i) <= register_bank_wr(i);
         --end loop;
+
+
+    time_elapsed_inst : entity work.time_elapsed
+        generic map (
+            G_USE_ASYNC_RESET    => USE_ASYNC_RESET ,
+            G_USE_SYNC_RESET     => USE_SYNC_RESET,
+            G_ASYNC_RESET_ACTIVE => '1',
+            G_SYNC_RESET_ACTIVE  => '1'
+        )
+        port map (
+            clk          => clk,
+            async_reset  => async_reset,
+            sync_reset   => sync_reset,
+            sync_pulse   => register_bank_rd_en(3),
+            elapsed_time => elapsed_time
+        );
 
 
 end rtl;

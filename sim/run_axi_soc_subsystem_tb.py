@@ -26,6 +26,7 @@ LIB.add_source_files( ROOT / "rtl_common"/ "src" / "axi_gpio.vhd")
 LIB.add_source_files( ROOT / "rtl_common"/ "src" / "axi_slave_reg_bank_pkg.vhd")
 LIB.add_source_files( ROOT / "rtl_common"/ "src" / "axi_slave_reg_bank.vhd")
 LIB.add_source_files( ROOT /  "src" / "timestamp_pkg.vhd")
+LIB.add_source_files( ROOT / "rtl_common"/ "src" / "time_elapsed.vhd")
 
 #Libraries
 LIB.add_source_files( ROOT / "tb" / "axi_soc_subsystem_tb.vhd")

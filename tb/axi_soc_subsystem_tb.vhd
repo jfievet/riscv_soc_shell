@@ -358,6 +358,40 @@ begin
 
     end if;
 
+    if run("test_009_time_elapsed") then
+
+        wait until rising_edge(resetn);
+        wait for 1 us;
+
+        info("Read from 0x30000C");
+        read_bus(net, bus_handle, x"0030000C", v_data_read);
+
+        info("Read from 0x300010");
+        read_bus(net, bus_handle, x"00300010", v_data_read);
+        check_equal(v_data_read,    std_logic_vector'(x"0000006C"),    "Time elapsed lsb mismatch");
+
+        info("Read from 0x300014");
+        read_bus(net, bus_handle, x"00300014", v_data_read);
+        check_equal(v_data_read,    std_logic_vector'(x"00000000"),    "Time elapsed msb mismatch");
+
+        wait for 10 us;
+
+        info("Read from 0x30000C");
+        read_bus(net, bus_handle, x"0030000C", v_data_read);
+        check_equal(v_data_read, std_logic_vector(to_unsigned(100_000_000, 32)), "Time elapsed reference frequency read");
+
+        info("Read from 0x300010");
+        read_bus(net, bus_handle, x"00300010", v_data_read);
+        check_equal(v_data_read,    std_logic_vector'(x"00000487"),    "Time elapsed lsb mismatch");
+
+        info("Read from 0x300014");
+        read_bus(net, bus_handle, x"00300014", v_data_read);
+        check_equal(v_data_read,    std_logic_vector'(x"00000000"),    "Time elapsed msb mismatch");
+
+        info("Finished");
+
+    end if;
+
     test_runner_cleanup(runner);
 end process;
 
