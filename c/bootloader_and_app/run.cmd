@@ -5,7 +5,7 @@ REM ------------------------------------------------------------------
 REM -- Configuration
 REM ------------------------------------------------------------------
 
-set APP_DIR=axi_write_loopback
+set APP_DIR=trng_test
 
 REM Set the path to your RISC-V GCC toolchain
 set RISCV_GCC_PATH=C:\Tools\xpack-riscv-none-elf-gcc-15.2.0-1\bin

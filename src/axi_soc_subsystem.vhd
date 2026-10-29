@@ -9,6 +9,7 @@ use work.axi_lite_interconnect_pkg.all;
 
 entity axi_soc_subsystem is
     generic (
+        G_SIM              : boolean   := TRUE;             
         USE_ASYNC_RESET    : boolean   := TRUE;
         USE_SYNC_RESET     : boolean   := TRUE;
         ASYNC_RESET_ACTIVE : std_logic := '1';
@@ -25,6 +26,8 @@ entity axi_soc_subsystem is
         G_LIMIT2 : std_logic_vector(32-1 downto 0) := x"002FFFFF";
         G_BASE3  : std_logic_vector(32-1 downto 0) := x"00300000";
         G_LIMIT3 : std_logic_vector(32-1 downto 0) := x"003FFFFF";
+        G_BASE4  : std_logic_vector(32-1 downto 0) := x"00400000";
+        G_LIMIT4 : std_logic_vector(32-1 downto 0) := x"004FFFFF";
 
         -- AXI RAM
         G_RAM_DEPTH : positive := 1024;
@@ -88,13 +91,14 @@ architecture rtl of axi_soc_subsystem is
 
 -- Interconnect configuration
 constant C_NB_MASTERS : integer := 2; -- CPU and external initiators
-constant C_NB_SLAVES  : integer := 4; -- RAM, UART, GPIO, register bank
+constant C_NB_SLAVES  : integer := 5; -- RAM, UART, GPIO, register bank, axi trng
 
 constant C_ADDR_START : axi_32b_bus_type := (
     0 => G_BASE0,
     1 => G_BASE1,
     2 => G_BASE2,
     3 => G_BASE3,
+    4 => G_BASE4,
     others => (others => '0')
 );
 
@@ -103,6 +107,7 @@ constant C_ADDR_END : axi_32b_bus_type := (
     1 => G_LIMIT1,
     2 => G_LIMIT2,
     3 => G_LIMIT3,
+    4 => G_LIMIT4,
     others => (others => '0')
 );
 
@@ -111,6 +116,7 @@ constant C_ADDR_OFFSET : axi_32b_bus_type := (
     1 => G_BASE1,
     2 => G_BASE2,
     3 => G_BASE3,
+    4 => G_BASE4,
     others => (others => '0')
 );
 
@@ -246,6 +252,27 @@ signal axi_slave_reg_bank_arprot  : std_logic_vector(2 downto 0);
 signal axi_slave_reg_bank_rvalid  : std_logic;
 signal axi_slave_reg_bank_rready  : std_logic;
 signal axi_slave_reg_bank_rdata   : std_logic_vector(32-1 downto 0);
+
+-- AXI TRNG signals
+signal axi_trng_awaddr  : std_logic_vector(31 downto 0);
+signal axi_trng_awprot  : std_logic_vector(2 downto 0);
+signal axi_trng_awvalid : std_logic;
+signal axi_trng_awready : std_logic;
+signal axi_trng_wdata   : std_logic_vector(31 downto 0);
+signal axi_trng_wstrb   : std_logic_vector(3 downto 0);
+signal axi_trng_wvalid  : std_logic;
+signal axi_trng_wready  : std_logic;
+signal axi_trng_bresp   : std_logic_vector(1 downto 0);
+signal axi_trng_bvalid  : std_logic;
+signal axi_trng_bready  : std_logic;
+signal axi_trng_araddr  : std_logic_vector(31 downto 0);
+signal axi_trng_arprot  : std_logic_vector(2 downto 0);
+signal axi_trng_arvalid : std_logic;
+signal axi_trng_arready : std_logic;
+signal axi_trng_rdata   : std_logic_vector(31 downto 0);
+signal axi_trng_rresp   : std_logic_vector(1 downto 0);
+signal axi_trng_rvalid  : std_logic;
+signal axi_trng_rready  : std_logic;
 
 -- Register bank signals
 signal register_bank_wr    : reg_bank_t;
@@ -652,7 +679,6 @@ gpio_out          <= axi_gpio_gpio_out;
         -- AXI 0x08
         register_bank_rd(2)                 <= register_bank_wr(2); -- Test loopback
 
-
         -- AXI 0x0C
         register_bank_rd(3)                 <= std_logic_vector(to_unsigned(G_SYS_FREQ,32));
 
@@ -683,6 +709,89 @@ gpio_out          <= axi_gpio_gpio_out;
             elapsed_time => elapsed_time
         );
 
+    -----------------------------------------------------------
+    --      AXI TRNG (Slave 4)
+    -----------------------------------------------------------
+
+    -- AXI TRNG <-> Interconnect bindings (slave 4)
+
+    -- Write address channel
+    ic_m_awready(4)  <= axi_trng_awready;
+    axi_trng_awaddr  <= ic_m_awaddr(4);
+    axi_trng_awprot  <= (others => '0');
+    axi_trng_awvalid <= ic_m_awvalid(4);
+
+    -- Write data channel
+    ic_m_wready(4)  <= axi_trng_wready;
+    axi_trng_wdata  <= ic_m_wdata(4);
+    axi_trng_wstrb  <= ic_m_wstrb(4);
+    axi_trng_wvalid <= ic_m_wvalid(4);
+
+    -- Write response channel
+    ic_m_bresp(4)   <= axi_trng_bresp;
+    ic_m_bvalid(4)  <= axi_trng_bvalid;
+    axi_trng_bready <= ic_m_bready(4);
+
+    -- Read address channel
+    ic_m_arready(4)  <= axi_trng_arready;
+    axi_trng_araddr  <= ic_m_araddr(4);
+    axi_trng_arprot  <= (others => '0');
+    axi_trng_arvalid <= ic_m_arvalid(4);
+
+    -- Read data channel
+    ic_m_rdata(4)   <= axi_trng_rdata;
+    ic_m_rresp(4)   <= axi_trng_rresp;
+    ic_m_rvalid(4)  <= axi_trng_rvalid;
+    axi_trng_rready <= ic_m_rready(4);
+
+    -- AXI TRNG instantiation
+    u_axi_trng : entity work.axi_trng
+        generic map (
+            G_SIM                  => G_SIM,
+            G_ADDR_WIDTH           => 32,
+            G_DATA_WIDTH           => 32,
+            G_RO_COUNT             => 8,
+            G_RO_STAGES            => 7,
+            G_DEFAULT_ACCUM_CYCLES => 1000,
+            G_USE_ASYNC_RESET      => USE_ASYNC_RESET,
+            G_USE_SYNC_RESET       => USE_SYNC_RESET,
+            G_ASYNC_RESET_ACTIVE   => ASYNC_RESET_ACTIVE,
+            G_SYNC_RESET_ACTIVE    => SYNC_RESET_ACTIVE
+        )
+        port map (
+            clk         => clk,
+            async_reset => async_reset,
+            sync_reset  => sync_reset,
+
+            -- Write address channel
+            s_axi_awaddr  => axi_trng_awaddr,
+            s_axi_awprot  => axi_trng_awprot,
+            s_axi_awvalid => axi_trng_awvalid,
+            s_axi_awready => axi_trng_awready,
+
+            -- Write data channel
+            s_axi_wdata   => axi_trng_wdata,
+            s_axi_wstrb   => axi_trng_wstrb,
+            s_axi_wvalid  => axi_trng_wvalid,
+            s_axi_wready  => axi_trng_wready,
+
+            -- Write response channel
+            s_axi_bresp   => axi_trng_bresp,
+            s_axi_bvalid  => axi_trng_bvalid,
+            s_axi_bready  => axi_trng_bready,
+
+            -- Read address channel
+            s_axi_araddr  => axi_trng_araddr,
+            s_axi_arprot  => axi_trng_arprot,
+            s_axi_arvalid => axi_trng_arvalid,
+            s_axi_arready => axi_trng_arready,
+
+            -- Read data channel
+            s_axi_rdata   => axi_trng_rdata,
+            s_axi_rresp   => axi_trng_rresp,
+            s_axi_rvalid  => axi_trng_rvalid,
+            s_axi_rready  => axi_trng_rready
+        );
 
 end rtl;
 

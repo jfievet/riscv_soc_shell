@@ -8,7 +8,7 @@
 ENTRY(_start)
 
 RAM_ORIGIN = 0x00001000;
-RAM_LENGTH = 0x00001000;   /* 4 KiB reserved for the Application */
+RAM_LENGTH = 0x00004000;   /* 4 KiB reserved for the Application */
 
 APP_ORIGIN = RAM_ORIGIN + RAM_LENGTH;
 

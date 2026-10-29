@@ -7,8 +7,8 @@ package timestamp_pkg is
     -- Date register (raw hex: 29102026)
     constant C_DATE_REGISTER_HEX   : std_logic_vector(31 downto 0) := x"29102026";
 
-    -- Time register (raw hex: 00102700)
-    constant C_TIME_REGISTER_HEX   : std_logic_vector(31 downto 0) := x"00102700";
+    -- Time register (raw hex: 00151900)
+    constant C_TIME_REGISTER_HEX   : std_logic_vector(31 downto 0) := x"00151900";
 
     -- Individual date fields
     constant C_DAY_HEX    : std_logic_vector(7 downto 0)  := x"1D";
@@ -16,8 +16,8 @@ package timestamp_pkg is
     constant C_YEAR_HEX   : std_logic_vector(15 downto 0) := x"07EA";
 
     -- Individual time fields
-    constant C_HOUR_HEX   : std_logic_vector(7 downto 0)  := x"0A";
-    constant C_MINUTE_HEX : std_logic_vector(7 downto 0)  := x"1B";
-    constant C_SECOND_HEX : std_logic_vector(7 downto 0)  := x"05";
+    constant C_HOUR_HEX   : std_logic_vector(7 downto 0)  := x"0F";
+    constant C_MINUTE_HEX : std_logic_vector(7 downto 0)  := x"13";
+    constant C_SECOND_HEX : std_logic_vector(7 downto 0)  := x"11";
 
 end package;
