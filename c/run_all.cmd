@@ -17,4 +17,3 @@ for /d %%D in ("%~dp0*") do (
 
 echo.
 echo All scripts completed.
-pause

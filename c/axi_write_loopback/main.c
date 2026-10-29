@@ -82,7 +82,7 @@ int main(void) {
     volatile uint32_t *test_reg = (volatile uint32_t *)0x300008;
     volatile uint32_t *freq_reg = (volatile uint32_t *)0x30000C;
     uint32_t sys_freq = *freq_reg;
-    dprint("FPGA system frequency: %u Hz\r\n", (unsigned int)sys_freq);
+    dprint("FPGA system frequency: %d Hz\r\n", (int)sys_freq);
 
     while (1) {
 
@@ -93,10 +93,10 @@ int main(void) {
         // Capture start time
         start_time = read_elapsed_time();
 
-        dprint("Start 100e6 writes\r\n");
+        dprint("Start 10e6 writes\r\n");
 
         // Perform 100 million writes
-        for (uint32_t i = 0; i < 100000000U; i++) {
+        for (uint32_t i = 0; i < 10000000U; i++) {
             *test_reg = 0x12345678;
         }
 
@@ -108,8 +108,11 @@ int main(void) {
 
         dprint("100e6 writes done\r\n");
 
-        dprint("Elapsed cycles: %llu\r\n",
-            (unsigned long long)delta_cycles);
+        dprint("Elapsed cycles: 0x");
+        uart_send_hex((uint32_t)(delta_cycles >> 32));  // Upper 32 bits
+        uart_send_hex((uint32_t)delta_cycles);          // Lower 32 bits
+        dprint("\r\n");
+        
     }
 
     return 0;
