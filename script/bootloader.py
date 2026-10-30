@@ -13,6 +13,9 @@ COM_PORT = "COM7"
 BAUDRATE = 250000
 
 APP_BASE = 0x00001000
+JUMP_ADDR = 0x00001000
+#JUMP_ADDR = 0x00500000
+#APP_BASE = 0x00500000
 
 RAM_FILE = Path("../c/bootloader_and_app/ram_data.txt")
 
@@ -20,6 +23,7 @@ ACK_TIMEOUT_S = 2.0
 
 SYNC_WRITE = 0xAA
 SYNC_JUMP  = 0x55
+SYNC_CONFIG_JUMP = 0xBB
 
 
 # ----------------------------------------------------------------------
@@ -98,6 +102,29 @@ def generate_frame(sync, addr, data):
         addr.to_bytes(4, byteorder="big") +
         data.to_bytes(4, byteorder="big")
     )
+
+
+def configure_jump_address(ser, jump_addr):
+    """Configure the execution address independently of the upload address."""
+    frame = generate_frame(SYNC_CONFIG_JUMP, 0, jump_addr)
+
+    ser.write(frame)
+    ser.flush()
+
+    ack = read_exact(ser, 9, ACK_TIMEOUT_S)
+
+    if ack is None:
+        print("\nERROR: Jump address configuration ACK timeout.")
+        return False
+
+    if ack != frame:
+        print("\nERROR: Incorrect jump address configuration ACK.")
+        print(f"Expected : {frame.hex(' ')}")
+        print(f"Received : {ack.hex(' ')}")
+        return False
+
+    print(f"Jump address configured: 0x{jump_addr:08X}")
+    return True
 
 
 def write_word(ser, addr, data):
@@ -451,6 +478,9 @@ def main():
         # --------------------------------------------------------------
         # Upload application
         # --------------------------------------------------------------
+
+        if not configure_jump_address(ser, JUMP_ADDR):
+            return
 
         result = upload_application(ser, RAM_FILE)
 

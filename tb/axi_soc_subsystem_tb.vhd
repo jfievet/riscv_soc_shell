@@ -146,6 +146,12 @@ axi_soc_subsystem_gpio_in <= axi_soc_subsystem_gpio_out;
 -- Main process with testcases
 -----------------------------------------
 test_runner : process
+type t_sdram_patterns is array (natural range <>) of std_logic_vector(31 downto 0);
+constant C_SDRAM_PATTERNS : t_sdram_patterns := (
+    x"00000000", x"FFFFFFFF", x"12345678", x"AAAAAAAA", x"55555555",
+    x"00000000", x"FFFFFFFF", x"12345678", x"56781234", x"0000FFFF",
+    x"FFFF0000", x"AAAA5555", x"5555AAAA", x"00000001", x"00010000"
+);
 variable v_data_read : std_logic_vector(31 downto 0);
 variable v_day    : std_logic_vector(7 downto 0);
 variable v_month  : std_logic_vector(7 downto 0);
@@ -483,15 +489,16 @@ begin
 
             info("Starting SDRAM write/read test");
 
-            -- Write one 32-bit word
-            write_bus(net,bus_handle,x"00500000",x"12345678");
-            info("SDRAM write completed");
-
-            -- Read back
-            read_bus(net,bus_handle,x"00500000",v_data_read);
-            info("SDRAM read data = 0x" & to_hstring(v_data_read));
-            -- Verify
-            check_equal(v_data_read,std_logic_vector'(x"12345678"),"SDRAM readback mismatch");
+            for i in C_SDRAM_PATTERNS'range loop
+                write_bus(net, bus_handle, x"00500000", C_SDRAM_PATTERNS(i));
+                read_bus(net, bus_handle, x"00500000", v_data_read);
+                info("SDRAM pattern " & integer'image(i) &
+                     " WRITE=0x" & to_hstring(C_SDRAM_PATTERNS(i)) &
+                     " READ=0x" & to_hstring(v_data_read));
+                check_equal(v_data_read, C_SDRAM_PATTERNS(i),
+                    "SDRAM readback mismatch at 0x00500000 for pattern " &
+                    integer'image(i) & " (0x" & to_hstring(C_SDRAM_PATTERNS(i)) & ")");
+            end loop;
             info("SDRAM write/read test PASSED");
         else
             info("SDRAM test skipped (C_ENABLE_SDRAM = FALSE)");

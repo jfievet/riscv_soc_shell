@@ -77,19 +77,39 @@ int main(void) {
     if (debug) gpio_write(0x6);
 
 
+    uint32_t app_base = APP_BASE;
+
     while (1) {
         uint8_t sync;
         uint32_t addr;
         uint32_t data;
         volatile uint32_t *target;
 
-        // Wait for SYNC byte 0xAA
+        // Wait for a supported command byte.
         if (debug) gpio_write(0x7);
         do {
             if (debug) gpio_write(0x8);
             sync = dget();
             if (debug) gpio_write(0x9);
-        } while (sync != 0xAA && sync != 0x55);
+        } while (sync != 0xAA && sync != 0x55 && sync != 0xBB);
+
+        if (sync == 0xBB) {
+            // Configure the jump address without writing to memory.
+            addr = uart_read_u32_be();
+            data = uart_read_u32_be();
+
+            if (addr == 0U) {
+                app_base = data;
+            }
+
+            // Return the received address and the effective jump base.
+            uart_send_byte(0xBB);
+            uart_send_u32_be(addr);
+            uart_send_u32_be(app_base);
+            while (*level_reg != 0) {
+                if (debug) gpio_write(0xFF);
+            }
+        }
 
         if (sync == 0xAA) {
             if (debug) gpio_write(0x10);
@@ -151,7 +171,7 @@ int main(void) {
             ch = dget();  // returns as soon as one byte is received
 
             if (ch == 0x79) {
-                entry_fn_t app_entry = (entry_fn_t)APP_BASE;
+                entry_fn_t app_entry = (entry_fn_t)app_base;
                 app_entry();
             }
         }

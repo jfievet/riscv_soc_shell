@@ -12,6 +12,15 @@
 #define SDRAM_BASE_ADDR    0x00500000U
 #define SDRAM_TEST_WORDS   101U
 
+#define SDRAM_SIZE_BYTES      0x00800000U
+#define SDRAM_TOTAL_WORDS     (SDRAM_SIZE_BYTES / 4U)
+#define SDRAM_MAX_ERRORS      20U
+#define SDRAM_PROGRESS_WORDS 200000U
+
+#if SDRAM_PROGRESS_WORDS == 0
+#error "SDRAM_PROGRESS_WORDS must be greater than zero"
+#endif
+
 // ============================================================
 // Register addresses
 // ============================================================
@@ -387,6 +396,175 @@ static void test_sdram_single(void)
 }
 
 // ============================================================
+// Option 5 - Full SDRAM test (8 MiB)
+// ============================================================
+
+static uint32_t sdram_pattern(uint32_t index)
+{
+    uint32_t x = index ^ 0xA5A55A5AU;
+
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+
+    return x;
+}
+
+static void test_sdram_full(void)
+{
+    uint32_t errors = 0;
+    uint32_t addr;
+    uint32_t expected;
+    uint32_t actual;
+
+    uint32_t sys_freq;
+
+    uint64_t start_time;
+    uint64_t write_end_time;
+    uint64_t end_time;
+
+    uint64_t write_cycles;
+    uint64_t read_cycles;
+    uint64_t total_cycles;
+
+    dprint("\r\n========== FULL SDRAM TEST ==========\r\n");
+
+    dprint("Base address: 0x");
+    uart_send_hex(SDRAM_BASE_ADDR);
+    dprint("\r\n");
+
+    dprint("Size: 8 MiB\r\n");
+    dprint("Words: %d\r\n", (int)SDRAM_TOTAL_WORDS);
+
+    dprint("\r\nWARNING: SDRAM CONTENT WILL BE OVERWRITTEN\r\n");
+
+    sys_freq = read_reg(TIME_FREQ_ADDR);
+
+    // --------------------------------------------------------
+    // Write phase
+    // --------------------------------------------------------
+
+    dprint("\r\nWriting SDRAM...\r\n");
+
+    start_time = read_elapsed_time();
+
+    for (uint32_t i = 0; i < SDRAM_TOTAL_WORDS; i++) {
+
+        addr = SDRAM_BASE_ADDR + (i * 4U);
+        expected = sdram_pattern(i);
+
+        write_reg(addr, expected);
+
+        uint32_t completed_words = i + 1U;
+        if ((completed_words % SDRAM_PROGRESS_WORDS) == 0U ||
+            completed_words == SDRAM_TOTAL_WORDS) {
+            dprint("Write progress: %d / %d words\r\n",
+                   (int)completed_words, (int)SDRAM_TOTAL_WORDS);
+        }
+    }
+
+    write_end_time = read_elapsed_time();
+
+    dprint("\r\nWrite completed.\r\n");
+
+    // --------------------------------------------------------
+    // Read and verify phase
+    // --------------------------------------------------------
+
+    dprint("\r\nReading and verifying SDRAM...\r\n");
+
+    for (uint32_t i = 0; i < SDRAM_TOTAL_WORDS; i++) {
+
+        addr = SDRAM_BASE_ADDR + (i * 4U);
+        expected = sdram_pattern(i);
+
+        actual = read_reg(addr);
+
+        if (actual != expected) {
+
+            errors++;
+
+            if (errors <= SDRAM_MAX_ERRORS) {
+
+                dprint("\r\nERROR at 0x");
+                uart_send_hex(addr);
+
+                dprint(" EXPECTED: 0x");
+                uart_send_hex(expected);
+
+                dprint(" ACTUAL: 0x");
+                uart_send_hex(actual);
+
+                dprint("\r\n");
+            }
+        }
+
+        uint32_t completed_words = i + 1U;
+        if ((completed_words % SDRAM_PROGRESS_WORDS) == 0U ||
+            completed_words == SDRAM_TOTAL_WORDS) {
+            dprint("Read progress: %d / %d words\r\n",
+                   (int)completed_words, (int)SDRAM_TOTAL_WORDS);
+        }
+    }
+
+    end_time = read_elapsed_time();
+
+    dprint("\r\nRead completed.\r\n");
+
+    // --------------------------------------------------------
+    // Timing results
+    // --------------------------------------------------------
+
+    write_cycles = write_end_time - start_time;
+    read_cycles = end_time - write_end_time;
+    total_cycles = end_time - start_time;
+
+    dprint("\r\n========== TIMING RESULTS ==========\r\n");
+
+    dprint("Write cycles: ");
+    print_hex64(write_cycles);
+    dprint("\r\n");
+
+    dprint("Read cycles:  ");
+    print_hex64(read_cycles);
+    dprint("\r\n");
+
+    dprint("Total cycles: ");
+    print_hex64(total_cycles);
+    dprint("\r\n");
+
+    dprint("Write time (us): %d\r\n",
+           (int)cycles_to_us(write_cycles, sys_freq));
+
+    dprint("Read time (us):  %d\r\n",
+           (int)cycles_to_us(read_cycles, sys_freq));
+
+    dprint("Total time (us): %d\r\n",
+           (int)cycles_to_us(total_cycles, sys_freq));
+
+    // --------------------------------------------------------
+    // Test results
+    // --------------------------------------------------------
+
+    dprint("\r\n========== SDRAM TEST RESULTS ==========\r\n");
+
+    dprint("Words tested: %d\r\n", (int)SDRAM_TOTAL_WORDS);
+    dprint("Total errors: %d\r\n", (int)errors);
+
+    if (errors == 0U) {
+        dprint("FULL SDRAM TEST PASSED\r\n");
+        gpio_write(0x04);
+    } else {
+        dprint("FULL SDRAM TEST FAILED\r\n");
+        gpio_write(0x08);
+    }
+
+    dprint("========================================\r\n");
+
+    wait_uart_tx();
+}
+
+// ============================================================
 // Main menu
 // ============================================================
 
@@ -398,8 +576,9 @@ static void show_menu(void)
     dprint("2. SDRAM Write/Read Test (0-100)\r\n");
     dprint("3. SDRAM Write/Read Test + Data Display\r\n");
     dprint("4. SDRAM Single Address Test\r\n");
+    dprint("5. Full SDRAM Test (8 MiB)\r\n");
     dprint("====================================\r\n");
-    dprint("Select an option (1-4): ");
+    dprint("Select an option (1-5): ");
 
     wait_uart_tx();
 }
@@ -441,9 +620,14 @@ int main(void)
                 gpio_write(0x04);
                 test_sdram_single();
                 break;
+                
+            case '5':
+                gpio_write(0x02);
+                test_sdram_full();
+                break;
 
             default:
-                dprint("\r\nInvalid option. Please select 1, 2, 3 or 4.\r\n");
+                dprint("\r\nInvalid option. Please select 1, 2, 3, 4, or 5.\r\n");
                 break;
         }
     }

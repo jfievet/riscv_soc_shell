@@ -84,6 +84,8 @@ begin
         variable cmd : std_logic_vector(2 downto 0);
         variable word_v : std_logic_vector(15 downto 0);
         variable any_open : boolean;
+        variable dqm_previous : std_logic_vector(1 downto 0) := "11";
+        variable dqm_two_clocks_ago : std_logic_vector(1 downto 0) := "11";
     begin
         if rising_edge(i_clk) then
             cycle := cycle + 1;
@@ -116,7 +118,15 @@ begin
             -- CL=3: output first beat at READ edge + 2, so the controller
             -- can capture it on READ edge + 3. Next beat one edge later.
             if read_remaining > 0 and cycle >= read_due then
-                dq_out_i <= mem(index_of(read_bank, row(read_bank), read_col)) after G_T_AC;
+                -- Each read byte is masked by DQM sampled two clocks earlier.
+                word_v := mem(index_of(read_bank, row(read_bank), read_col));
+                if dqm_two_clocks_ago(0) /= '0' then
+                    word_v(7 downto 0) := (others => 'Z');
+                end if;
+                if dqm_two_clocks_ago(1) /= '0' then
+                    word_v(15 downto 8) := (others => 'Z');
+                end if;
+                dq_out_i <= word_v after G_T_AC;
                 dq_oe_i <= '1' after G_T_AC;
                 read_col := (read_col + 1) mod 256;
                 read_remaining := read_remaining - 1;
@@ -126,6 +136,10 @@ begin
                                                       activated_at(read_bank) + G_T_RAS_CYCLES);
                 end if;
             end if;
+
+            -- Advance history after using the sample from two edges earlier.
+            dqm_two_clocks_ago := dqm_previous;
+            dqm_previous := i_dqm;
 
             if i_cke = '1' and i_cs_n = '0' then
                 b := to_integer(unsigned(i_ba));
