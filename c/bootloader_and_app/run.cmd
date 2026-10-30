@@ -5,7 +5,7 @@ REM ------------------------------------------------------------------
 REM -- Configuration
 REM ------------------------------------------------------------------
 
-set APP_DIR=trng_test
+set APP_DIR=sdram_scan
 
 REM Set the path to your RISC-V GCC toolchain
 set RISCV_GCC_PATH=C:\Tools\xpack-riscv-none-elf-gcc-15.2.0-1\bin

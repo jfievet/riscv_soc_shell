@@ -5,6 +5,7 @@ use ieee.numeric_std.all;
 entity soc is
     generic (
         G_SIM              : boolean   := TRUE;  
+        G_ENABLE_SDRAM     : boolean   := FALSE;         
         USE_ASYNC_RESET    : boolean   := TRUE;
         USE_SYNC_RESET     : boolean   := TRUE;
         ASYNC_RESET_ACTIVE : std_logic := '1';
@@ -47,7 +48,16 @@ entity soc is
         ext_axi_rready  : in  std_logic;
         ext_axi_rdata   : out std_logic_vector(31 downto 0);
         ext_axi_bresp   : out std_logic_vector(1 downto 0);
-        ext_axi_rresp   : out std_logic_vector(1 downto 0)
+        ext_axi_rresp   : out std_logic_vector(1 downto 0);
+        sdram_cke       : out std_logic;
+        sdram_cs_n      : out std_logic;
+        sdram_ras_n     : out std_logic;
+        sdram_cas_n     : out std_logic;
+        sdram_we_n      : out std_logic;
+        sdram_ba        : out std_logic_vector(1 downto 0);
+        sdram_addr      : out std_logic_vector(11 downto 0);
+        sdram_dqm       : out std_logic_vector(1 downto 0);
+        sdram_dq        : inout std_logic_vector(15 downto 0)
     );
 end entity;
 
@@ -146,6 +156,7 @@ begin
     axi_soc_subsystem_inst : entity work.axi_soc_subsystem
         generic map (
             G_SIM              => G_SIM,      
+            G_ENABLE_SDRAM     => G_ENABLE_SDRAM, 
             USE_ASYNC_RESET    => USE_ASYNC_RESET,
             USE_SYNC_RESET     => USE_SYNC_RESET,
             ASYNC_RESET_ACTIVE => ASYNC_RESET_ACTIVE,
@@ -214,7 +225,16 @@ begin
             uart_rx            => uart_rx,
             uart_tx            => uart_tx,
             gpio_in            => gpio_in,
-            gpio_out           => gpio_out
+            gpio_out           => gpio_out,
+            sdram_cke          => sdram_cke,
+            sdram_cs_n         => sdram_cs_n,
+            sdram_ras_n        => sdram_ras_n,
+            sdram_cas_n        => sdram_cas_n,
+            sdram_we_n         => sdram_we_n,
+            sdram_ba           => sdram_ba,
+            sdram_addr         => sdram_addr,
+            sdram_dqm          => sdram_dqm,
+            sdram_dq           => sdram_dq
         );
 
     gpio_in <= gpio_out;
