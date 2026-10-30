@@ -9,7 +9,8 @@ use work.axi_lite_interconnect_pkg.all;
 
 entity axi_soc_subsystem is
     generic (
-        G_SIM              : boolean   := TRUE;             
+        G_SIM              : boolean   := TRUE;    
+        G_ENABLE_SDRAM     : boolean   := FALSE;         
         USE_ASYNC_RESET    : boolean   := TRUE;
         USE_SYNC_RESET     : boolean   := TRUE;
         ASYNC_RESET_ACTIVE : std_logic := '1';
@@ -28,6 +29,8 @@ entity axi_soc_subsystem is
         G_LIMIT3 : std_logic_vector(32-1 downto 0) := x"003FFFFF";
         G_BASE4  : std_logic_vector(32-1 downto 0) := x"00400000";
         G_LIMIT4 : std_logic_vector(32-1 downto 0) := x"004FFFFF";
+        G_BASE5  : std_logic_vector(32-1 downto 0) := x"00500000"; -- 8MB sdram
+        G_LIMIT5 : std_logic_vector(32-1 downto 0) := x"00CFFFFF";
 
         -- AXI RAM
         G_RAM_DEPTH : positive := 1024;
@@ -83,15 +86,25 @@ entity axi_soc_subsystem is
         uart_rx         : in  std_logic;
         uart_tx         : out std_logic;
         gpio_in         : in std_logic_vector(31 downto 0);
-        gpio_out        : out std_logic_vector(31 downto 0)
-);
-end entity;
+        gpio_out        : out std_logic_vector(31 downto 0);
+        sdram_cke       : out std_logic;
+        sdram_cs_n      : out std_logic;
+        sdram_ras_n     : out std_logic;
+        sdram_cas_n     : out std_logic;
+        sdram_we_n      : out std_logic;
+        sdram_ba        : out std_logic_vector(1 downto 0);
+        sdram_addr      : out std_logic_vector(11 downto 0);
+        sdram_dqm       : out std_logic_vector(1 downto 0);
+        sdram_dq        : inout std_logic_vector(15 downto 0)
+);  
+end entity; 
 
 architecture rtl of axi_soc_subsystem is
 
 -- Interconnect configuration
-constant C_NB_MASTERS : integer := 2; -- CPU and external initiators
-constant C_NB_SLAVES  : integer := 5; -- RAM, UART, GPIO, register bank, axi trng
+-- C_NB_SLAVES equals the number of base
+constant C_NB_MASTERS   : integer := 2; -- CPU and external initiators
+constant C_NB_SLAVES    : integer := 5 + boolean'pos(G_ENABLE_SDRAM); -- RAM, UART, GPIO, register bank, axi trng
 
 constant C_ADDR_START : axi_32b_bus_type := (
     0 => G_BASE0,
@@ -99,6 +112,7 @@ constant C_ADDR_START : axi_32b_bus_type := (
     2 => G_BASE2,
     3 => G_BASE3,
     4 => G_BASE4,
+    5 => G_BASE5,
     others => (others => '0')
 );
 
@@ -108,6 +122,7 @@ constant C_ADDR_END : axi_32b_bus_type := (
     2 => G_LIMIT2,
     3 => G_LIMIT3,
     4 => G_LIMIT4,
+    5 => G_LIMIT5,
     others => (others => '0')
 );
 
@@ -117,6 +132,7 @@ constant C_ADDR_OFFSET : axi_32b_bus_type := (
     2 => G_BASE2,
     3 => G_BASE3,
     4 => G_BASE4,
+    5 => G_BASE5,
     others => (others => '0')
 );
 
@@ -273,6 +289,33 @@ signal axi_trng_rdata   : std_logic_vector(31 downto 0);
 signal axi_trng_rresp   : std_logic_vector(1 downto 0);
 signal axi_trng_rvalid  : std_logic;
 signal axi_trng_rready  : std_logic;
+
+-- AXI SDRAM signals
+signal axi_sdram_awaddr  : std_logic_vector(31 downto 0);
+signal axi_sdram_awvalid : std_logic;
+signal axi_sdram_awready : std_logic;
+signal axi_sdram_wdata   : std_logic_vector(31 downto 0);
+signal axi_sdram_wstrb   : std_logic_vector(3 downto 0);
+signal axi_sdram_wvalid  : std_logic;
+signal axi_sdram_wready  : std_logic;
+signal axi_sdram_bresp   : std_logic_vector(1 downto 0);
+signal axi_sdram_bvalid  : std_logic;
+signal axi_sdram_bready  : std_logic;
+signal axi_sdram_araddr  : std_logic_vector(31 downto 0);
+signal axi_sdram_arvalid : std_logic;
+signal axi_sdram_arready : std_logic;
+signal axi_sdram_rdata   : std_logic_vector(31 downto 0);
+signal axi_sdram_rresp   : std_logic_vector(1 downto 0);
+signal axi_sdram_rvalid  : std_logic;
+signal axi_sdram_rready  : std_logic;
+signal sdram_req_valid   : std_logic;
+signal sdram_req_write   : std_logic;
+signal sdram_req_addr    : std_logic_vector(22 downto 0);
+signal sdram_req_wdata   : std_logic_vector(31 downto 0);
+signal sdram_req_wstrb   : std_logic_vector(3 downto 0);
+signal sdram_rsp_valid   : std_logic;
+signal sdram_rsp_rdata   : std_logic_vector(31 downto 0);
+signal sdram_ready       : std_logic;
 
 -- Register bank signals
 signal register_bank_wr    : reg_bank_t;
@@ -792,6 +835,173 @@ gpio_out          <= axi_gpio_gpio_out;
             s_axi_rvalid  => axi_trng_rvalid,
             s_axi_rready  => axi_trng_rready
         );
+
+    -----------------------------------------------------------
+    --      AXI SDRAM (Slave 5)
+    -----------------------------------------------------------
+
+    gen_no_sdram : if not G_ENABLE_SDRAM generate
+
+        sdram_req_valid <= '0';
+        sdram_req_write <= '0';
+        sdram_req_addr  <= (others => '0');
+        sdram_req_wdata <= (others => '0');
+        sdram_req_wstrb <= (others => '0');
+
+        sdram_cke   <= '0';
+        sdram_cs_n  <= '1';
+        sdram_ras_n <= '1';
+        sdram_cas_n <= '1';
+        sdram_we_n  <= '1';
+
+        sdram_ba    <= (others => '0');
+        sdram_addr  <= (others => '0');
+        sdram_dqm   <= (others => '1');
+
+        sdram_dq    <= (others => 'Z');
+
+    end generate gen_no_sdram;
+
+-----------------------------------------------------------
+--      AXI SDRAM (Slave 5)
+-----------------------------------------------------------
+
+-- Write address channel
+axi_sdram_awaddr   <= ic_m_awaddr(5);
+axi_sdram_awvalid  <= ic_m_awvalid(5);
+ic_m_awready(5)    <= axi_sdram_awready;
+
+-- Write data channel
+axi_sdram_wdata    <= ic_m_wdata(5);
+axi_sdram_wstrb    <= ic_m_wstrb(5);
+axi_sdram_wvalid   <= ic_m_wvalid(5);
+ic_m_wready(5)     <= axi_sdram_wready;
+
+-- Write response channel
+ic_m_bresp(5)      <= axi_sdram_bresp;
+ic_m_bvalid(5)     <= axi_sdram_bvalid;
+axi_sdram_bready   <= ic_m_bready(5);
+
+-- Read address channel
+axi_sdram_araddr   <= ic_m_araddr(5);
+axi_sdram_arvalid  <= ic_m_arvalid(5);
+ic_m_arready(5)    <= axi_sdram_arready;
+
+-- Read data channel
+ic_m_rdata(5)      <= axi_sdram_rdata;
+ic_m_rresp(5)      <= axi_sdram_rresp;
+ic_m_rvalid(5)     <= axi_sdram_rvalid;
+axi_sdram_rready   <= ic_m_rready(5);
+
+
+-----------------------------------------------------------
+-- AXI SDRAM instantiation
+-----------------------------------------------------------
+gen_sdram : if G_ENABLE_SDRAM generate
+
+
+    u_axi_lite_sdram : entity work.axi_lite_sdram
+        generic map (
+            G_USE_ASYNC_RESET    => USE_ASYNC_RESET,
+            G_USE_SYNC_RESET     => USE_SYNC_RESET,
+            G_ASYNC_RESET_ACTIVE => ASYNC_RESET_ACTIVE,
+            G_SYNC_RESET_ACTIVE  => SYNC_RESET_ACTIVE
+        )
+        port map (
+            -- Clock and reset
+            i_clk         => clk,
+            i_async_reset => async_reset,
+            i_sync_reset  => sync_reset,
+
+            -- AXI write address
+            s_axi_awaddr  => axi_sdram_awaddr,
+            s_axi_awvalid => axi_sdram_awvalid,
+            s_axi_awready => axi_sdram_awready,
+
+            -- AXI write data
+            s_axi_wdata   => axi_sdram_wdata,
+            s_axi_wstrb   => axi_sdram_wstrb,
+            s_axi_wvalid  => axi_sdram_wvalid,
+            s_axi_wready  => axi_sdram_wready,
+
+            -- AXI write response
+            s_axi_bresp   => axi_sdram_bresp,
+            s_axi_bvalid  => axi_sdram_bvalid,
+            s_axi_bready  => axi_sdram_bready,
+
+            -- AXI read address
+            s_axi_araddr  => axi_sdram_araddr,
+            s_axi_arvalid => axi_sdram_arvalid,
+            s_axi_arready => axi_sdram_arready,
+
+            -- AXI read data
+            s_axi_rdata   => axi_sdram_rdata,
+            s_axi_rresp   => axi_sdram_rresp,
+            s_axi_rvalid  => axi_sdram_rvalid,
+            s_axi_rready  => axi_sdram_rready,
+
+            -- SDRAM controller transaction interface
+            o_req_valid => sdram_req_valid,
+            o_req_write => sdram_req_write,
+            o_req_addr  => sdram_req_addr,
+            o_req_wdata => sdram_req_wdata,
+            o_req_wstrb => sdram_req_wstrb,
+
+            i_rsp_valid => sdram_rsp_valid,
+            i_rsp_rdata => sdram_rsp_rdata
+        );
+
+
+    u_sdram_controller : entity work.sdram_controller
+        generic map (
+            G_USE_ASYNC_RESET    => USE_ASYNC_RESET,
+            G_USE_SYNC_RESET     => USE_SYNC_RESET,
+            G_ASYNC_RESET_ACTIVE => ASYNC_RESET_ACTIVE,
+            G_SYNC_RESET_ACTIVE  => SYNC_RESET_ACTIVE,
+
+            G_POWERUP_CYCLES => 20000,
+            G_T_RP           => 3,
+            G_T_RCD          => 3,
+            G_T_RFC          => 8,
+            G_T_MRD          => 2,
+            G_T_RAS          => 5,
+            G_T_RC           => 8,
+            G_T_WR           => 2,
+            G_T_RTP          => 2,
+            G_T_REFI         => 1500
+        )
+        port map (
+            -- Clock and reset
+            i_clk         => clk,
+            i_async_reset => async_reset,
+            i_sync_reset  => sync_reset,
+
+            -- Transaction interface
+            i_req_valid   => sdram_req_valid,
+            i_req_write   => sdram_req_write,
+            i_req_addr    => sdram_req_addr,
+            i_req_wdata   => sdram_req_wdata,
+            i_req_wstrb   => sdram_req_wstrb,
+
+            o_rsp_valid   => sdram_rsp_valid,
+            o_rsp_rdata   => sdram_rsp_rdata,
+            o_ready       => sdram_ready,
+
+            -- SDRAM physical interface
+            o_sdram_cke   => sdram_cke,
+            o_sdram_cs_n  => sdram_cs_n,
+            o_sdram_ras_n => sdram_ras_n,
+            o_sdram_cas_n => sdram_cas_n,
+            o_sdram_we_n  => sdram_we_n,
+
+            o_sdram_ba    => sdram_ba,
+            o_sdram_addr  => sdram_addr,
+            o_sdram_dqm   => sdram_dqm,
+            io_sdram_dq   => sdram_dq
+        );
+
+
+end generate gen_sdram;
 
 end rtl;
 

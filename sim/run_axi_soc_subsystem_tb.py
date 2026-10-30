@@ -32,9 +32,12 @@ LIB.add_source_files( ROOT / "rtl_common"/ "src" / "trng_prbs32.vhd")
 LIB.add_source_files( ROOT / "rtl_common"/ "src" / "trng_random_generator.vhd")
 LIB.add_source_files( ROOT / "rtl_common"/ "src" / "trng_ring_oscillator.vhd")
 LIB.add_source_files( ROOT / "rtl_common"/ "src" / "axi_trng.vhd")
+LIB.add_source_files( ROOT / "rtl_common"/ "src" / "sdram_controller.vhd")
+LIB.add_source_files( ROOT / "rtl_common"/ "src" / "axi_lite_sdram.vhd")
 
 #Libraries
 LIB.add_source_files( ROOT / "tb" / "axi_soc_subsystem_tb.vhd")
+LIB.add_source_files( ROOT / "tb" / "model" / "sdram_model.vhd")
 
 # Modelsim options
 VU.set_sim_option('modelsim.init_files.after_load', [str(ROOT / 'sim' / 'wave_axi_soc_subsystem_tb.do')])

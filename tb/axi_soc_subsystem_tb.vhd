@@ -24,6 +24,7 @@ constant num_random_tests : integer := 128;
 
 constant G_ADDR_WIDTH : integer := 32;
 constant G_DATA_WIDTH : integer := 32;
+constant C_ENABLE_SDRAM : boolean := TRUE;
 
 signal ref_DAY_HEX    : std_logic_vector(7 downto 0)  := C_DAY_HEX;
 signal ref_MONTH_HEX  : std_logic_vector(7 downto 0)  := C_MONTH_HEX;
@@ -111,6 +112,18 @@ signal axi_soc_subsystem_gpio_out : std_logic_vector(31 downto 0);
 
 -- Checking signal
 signal rx_data                           : std_logic_vector(31 downto 0);
+
+-- SDRAM signals
+-- SDRAM interface
+signal sdram_cke   : std_logic;
+signal sdram_cs_n  : std_logic;
+signal sdram_ras_n : std_logic;
+signal sdram_cas_n : std_logic;
+signal sdram_we_n  : std_logic;
+signal sdram_ba    : std_logic_vector(1 downto 0);
+signal sdram_addr  : std_logic_vector(11 downto 0);
+signal sdram_dqm   : std_logic_vector(1 downto 0);
+signal sdram_dq    : std_logic_vector(15 downto 0);
 
 begin
 
@@ -459,6 +472,56 @@ begin
 
     end if;
 
+    if run("test_011_sdram_write_read") then
+
+        if C_ENABLE_SDRAM then
+
+            wait until rising_edge(resetn);
+
+            -- Wait for SDRAM initialization (200 us + margin)
+            wait for 250 us;
+
+            info("Starting SDRAM write/read test");
+
+            -- Write one 32-bit word
+            write_bus(net,bus_handle,x"00500000",x"12345678");
+            info("SDRAM write completed");
+
+            -- Read back
+            read_bus(net,bus_handle,x"00500000",v_data_read);
+            info("SDRAM read data = 0x" & to_hstring(v_data_read));
+            -- Verify
+            check_equal(v_data_read,std_logic_vector'(x"12345678"),"SDRAM readback mismatch");
+            info("SDRAM write/read test PASSED");
+        else
+            info("SDRAM test skipped (C_ENABLE_SDRAM = FALSE)");
+        end if;
+
+    end if;
+
+    if run("test_012_sdram_write_read_1024") then
+        if C_ENABLE_SDRAM then
+            wait until rising_edge(resetn);
+            wait for 250 us;
+
+            for i in 0 to 1023 loop
+                write_bus(net, bus_handle,
+                    std_logic_vector(to_unsigned(16#00500000# + i*4, 32)),
+                    std_logic_vector(to_unsigned(i, 32)));
+            end loop;
+
+            for i in 0 to 1023 loop
+                read_bus(net, bus_handle,
+                    std_logic_vector(to_unsigned(16#00500000# + i*4, 32)),
+                    v_data_read);
+                check_equal(v_data_read, std_logic_vector(to_unsigned(i, 32)),
+                    "SDRAM mismatch at index " & integer'image(i));
+            end loop;
+
+            info("SDRAM 1024 words test PASSED");
+        end if;
+    end if;
+
     test_runner_cleanup(runner);
 end process;
 
@@ -500,6 +563,7 @@ rresp <= cpu_axi_rresp;
 axi_soc_subsystem_inst : entity work.axi_soc_subsystem
     generic map (
         G_SIM           => TRUE,
+        G_ENABLE_SDRAM   => C_ENABLE_SDRAM,
         USE_ASYNC_RESET => FALSE,
         USE_SYNC_RESET => TRUE,
         G_ADDR_WIDTH => 32,
@@ -514,6 +578,8 @@ axi_soc_subsystem_inst : entity work.axi_soc_subsystem
         G_LIMIT3     => x"003FFFFF",
         G_BASE4      => x"00400000",
         G_LIMIT4     => x"004FFFFF",
+        G_BASE5      => x"00500000",
+        G_LIMIT5     => x"00CFFFFF",
         G_RAM_DEPTH  => 1024,
         G_SYS_FREQ   => 100_000_000,
         G_BAUDRATE   => 781248,
@@ -565,7 +631,16 @@ axi_soc_subsystem_inst : entity work.axi_soc_subsystem
         uart_rx => axi_soc_subsystem_uart_rx,
         uart_tx => axi_soc_subsystem_uart_tx,
         gpio_in => axi_soc_subsystem_gpio_in,
-        gpio_out => axi_soc_subsystem_gpio_out
+        gpio_out => axi_soc_subsystem_gpio_out,
+        sdram_cke   => sdram_cke,
+        sdram_cs_n  => sdram_cs_n,
+        sdram_ras_n => sdram_ras_n,
+        sdram_cas_n => sdram_cas_n,
+        sdram_we_n  => sdram_we_n,
+        sdram_ba    => sdram_ba,
+        sdram_addr  => sdram_addr,
+        sdram_dqm   => sdram_dqm,
+        sdram_dq    => sdram_dq
     );
 
 -- UART loopback
@@ -597,6 +672,33 @@ port map (
     bready  => bready,
     bresp   => bresp);
 
-  
+-----------------------------------------------------------
+-- SDRAM MODEL
+-----------------------------------------------------------
+gen_sdram_model : if C_ENABLE_SDRAM generate
+    u_sdram_model : entity work.sdram_model
+        generic map (
+            G_T_AC          => 1 ns,
+            G_T_RCD_CYCLES => 3,
+            G_T_RP_CYCLES  => 3,
+            G_T_RFC_CYCLES => 8,
+            G_T_RAS_CYCLES => 5,
+            G_T_WR_CYCLES  => 2,
+            G_CHECK_TIMING  => TRUE
+        )
+        port map (
+            i_clk   => clk,
+            i_cke   => sdram_cke,
+            i_cs_n  => sdram_cs_n,
+            i_ras_n => sdram_ras_n,
+            i_cas_n => sdram_cas_n,
+            i_we_n  => sdram_we_n,
+
+            i_ba    => sdram_ba,
+            i_addr  => sdram_addr,
+            i_dqm   => sdram_dqm,
+            io_dq   => sdram_dq
+        );
+end generate gen_sdram_model;
 
 end architecture;
