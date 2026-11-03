@@ -9,7 +9,8 @@ use work.axi_lite_interconnect_pkg.all;
 
 entity axi_soc_subsystem is
     generic (
-        G_SIM              : boolean   := TRUE;    
+        G_SIM              : boolean   := TRUE;   
+        G_ENABLE_TRNG      : boolean   := FALSE; 
         G_ENABLE_SDRAM     : boolean   := FALSE;         
         USE_ASYNC_RESET    : boolean   := TRUE;
         USE_SYNC_RESET     : boolean   := TRUE;
@@ -104,7 +105,7 @@ architecture rtl of axi_soc_subsystem is
 -- Interconnect configuration
 -- C_NB_SLAVES equals the number of base
 constant C_NB_MASTERS   : integer := 2; -- CPU and external initiators
-constant C_NB_SLAVES    : integer := 5 + boolean'pos(G_ENABLE_SDRAM); -- RAM, UART, GPIO, register bank, axi trng
+constant C_NB_SLAVES    : integer := 6; -- RAM, UART, GPIO, register bank, axi trng
 
 constant C_ADDR_START : axi_32b_bus_type := (
     0 => G_BASE0,
@@ -756,6 +757,8 @@ gpio_out          <= axi_gpio_gpio_out;
     --      AXI TRNG (Slave 4)
     -----------------------------------------------------------
 
+gen_trng : if G_ENABLE_TRNG generate
+
     -- AXI TRNG <-> Interconnect bindings (slave 4)
 
     -- Write address channel
@@ -835,6 +838,8 @@ gpio_out          <= axi_gpio_gpio_out;
             s_axi_rvalid  => axi_trng_rvalid,
             s_axi_rready  => axi_trng_rready
         );
+
+end generate gen_trng;
 
     -----------------------------------------------------------
     --      AXI SDRAM (Slave 5)

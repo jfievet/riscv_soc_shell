@@ -5,7 +5,8 @@ use ieee.numeric_std.all;
 entity soc is
     generic (
         G_SIM              : boolean   := TRUE;  
-        G_ENABLE_SDRAM     : boolean   := FALSE;         
+        G_ENABLE_SDRAM     : boolean   := FALSE;     
+        G_ENABLE_TRNG      : boolean   := FALSE;    
         USE_ASYNC_RESET    : boolean   := TRUE;
         USE_SYNC_RESET     : boolean   := TRUE;
         ASYNC_RESET_ACTIVE : std_logic := '1';
@@ -155,7 +156,8 @@ begin
 
     axi_soc_subsystem_inst : entity work.axi_soc_subsystem
         generic map (
-            G_SIM              => G_SIM,      
+            G_SIM              => G_SIM,     
+            G_ENABLE_TRNG      => G_ENABLE_TRNG, 
             G_ENABLE_SDRAM     => G_ENABLE_SDRAM, 
             USE_ASYNC_RESET    => USE_ASYNC_RESET,
             USE_SYNC_RESET     => USE_SYNC_RESET,
