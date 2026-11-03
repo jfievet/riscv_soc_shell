@@ -521,7 +521,7 @@ def main():
         print("Application is ready to start.")
         print("-----------------------------------------------")
         print()
-        print("Press 'y' to jump to the RISC-V application.")
+        print("Press 'y' to jump to the RISC-V application or Ctrl+C to exit.")
 
         # --------------------------------------------------------------
         # USER confirmation
