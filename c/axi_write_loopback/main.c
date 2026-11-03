@@ -95,7 +95,7 @@ int main(void) {
 
         dprint("Start 10e6 writes\r\n");
 
-        // Perform 100 million writes
+        // Perform 10 million writes
         for (uint32_t i = 0; i < 10000000U; i++) {
             *test_reg = 0x12345678;
         }
@@ -106,7 +106,7 @@ int main(void) {
         // Calculate elapsed cycles
         delta_cycles = end_time - start_time;
 
-        dprint("100e6 writes done\r\n");
+        dprint("10e6 writes done\r\n");
 
         dprint("Elapsed cycles: 0x");
         uart_send_hex((uint32_t)(delta_cycles >> 32));  // Upper 32 bits
