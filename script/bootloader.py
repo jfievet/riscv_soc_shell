@@ -462,6 +462,8 @@ def main():
     print(f"UART opened: {COM_PORT} @ {BAUDRATE} baud")
     print()
 
+    waiting_for_confirmation = False
+
     try:
 
         # --------------------------------------------------------------
@@ -525,12 +527,21 @@ def main():
         # USER confirmation
         # --------------------------------------------------------------
 
+        waiting_for_confirmation = True
+
         while True:
 
             ch = msvcrt.getwch()
 
+            # getwch() can return Ctrl+C instead of raising KeyboardInterrupt.
+            # Return before sending anything to UART; finally closes the port.
+            if ch == "\x03":
+                return
+
             if ch.lower() == "y":
                 break
+
+        waiting_for_confirmation = False
 
         print("y")
 
@@ -553,13 +564,15 @@ def main():
 
     except KeyboardInterrupt:
 
-        print()
-        print("Interrupted.")
+        if not waiting_for_confirmation:
+            print()
+            print("Interrupted.")
 
     finally:
 
         ser.close()
-        print("UART closed.")
+        if not waiting_for_confirmation:
+            print("UART closed.")
 
 
 # ----------------------------------------------------------------------
