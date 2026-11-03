@@ -309,10 +309,10 @@ static void test_sdram_scan(bool verbose)
 
     if (errors == 0) {
         dprint("SDRAM TEST PASSED\r\n");
-        gpio_write(0x04);
+        //gpio_write(0x04);
     } else {
         dprint("SDRAM TEST FAILED\r\n");
-        gpio_write(0x08);
+        //gpio_write(0x08);
     }
 
     dprint("========================================\r\n");
@@ -384,10 +384,10 @@ static void test_sdram_single(void)
 
     if (errors == 0) {
         dprint("SDRAM SINGLE ADDRESS TEST PASSED\r\n");
-        gpio_write(0x04);
+        //gpio_write(0x04);
     } else {
         dprint("SDRAM SINGLE ADDRESS TEST FAILED\r\n");
-        gpio_write(0x08);
+        //gpio_write(0x08);
     }
 
     dprint("==================================\r\n");
@@ -553,10 +553,10 @@ static void test_sdram_full(void)
 
     if (errors == 0U) {
         dprint("FULL SDRAM TEST PASSED\r\n");
-        gpio_write(0x04);
+        //gpio_write(0x04);
     } else {
         dprint("FULL SDRAM TEST FAILED\r\n");
-        gpio_write(0x08);
+        //gpio_write(0x08);
     }
 
     dprint("========================================\r\n");
@@ -591,7 +591,7 @@ int main(void)
 {
     uint8_t choice;
 
-    gpio_write(0x01);
+    //gpio_write(0x01);
 
     while (1) {
 
@@ -602,27 +602,27 @@ int main(void)
         switch (choice) {
 
             case '1':
-                gpio_write(0x01);
+                //gpio_write(0x01);
                 show_system_information();
                 break;
 
             case '2':
-                gpio_write(0x02);
+                //gpio_write(0x02);
                 test_sdram_scan(false);
                 break;
 
             case '3':
-                gpio_write(0x03);
+                //gpio_write(0x03);
                 test_sdram_scan(true);
                 break;
                 
             case '4':
-                gpio_write(0x04);
+                //gpio_write(0x04);
                 test_sdram_single();
                 break;
                 
             case '5':
-                gpio_write(0x02);
+                //gpio_write(0x02);
                 test_sdram_full();
                 break;
 

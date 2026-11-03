@@ -297,11 +297,11 @@ static void test_trng_single(void)
 
     while (1) {
 
-        gpio_write(0x01);
+        //gpio_write(0x01);
 
         if (trng_measure(&measurement)) {
 
-            gpio_write(0x02);
+            //gpio_write(0x02);
 
             display_trng_measurement(&measurement);
 
@@ -372,7 +372,7 @@ static void test_trng_statistics(void)
         batch_completed = 0;
         batch_errors = 0;
 
-        gpio_write(0x03);
+        //gpio_write(0x03);
 
         dprint("\r\nStarting TRNG acquisition batch...\r\n");
         dprint("Acquisitions per batch: %d\r\n",
@@ -422,7 +422,7 @@ static void test_trng_statistics(void)
         total_errors += batch_errors;
         total_cycles += delta_cycles;
 
-        gpio_write(0x04);
+        //gpio_write(0x04);
 
         // -----------------------------------------
         // Display batch results
@@ -557,7 +557,7 @@ int main(void)
 {
     uint8_t choice;
 
-    gpio_write(0x01);
+    //gpio_write(0x01);
 
     while (1) {
 
@@ -568,17 +568,17 @@ int main(void)
         switch (choice) {
 
             case '1':
-                gpio_write(0x01);
+                //gpio_write(0x01);
                 show_system_information();
                 break;
 
             case '2':
-                gpio_write(0x02);
+                //gpio_write(0x02);
                 test_trng_single();
                 break;
 
             case '3':
-                gpio_write(0x03);
+                //gpio_write(0x03);
                 test_trng_statistics();
                 break;
 

@@ -6,7 +6,7 @@
 #include "generated_header.h"
 #include "../common/common_lib.h"
 
-#define _DEBUG_ 1;
+#define _DEBUG_ 0;
 
 typedef void (*entry_fn_t)(void);
 #define APP_BASE 0x00001000u
