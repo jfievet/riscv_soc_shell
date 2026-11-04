@@ -105,7 +105,7 @@ architecture rtl of axi_soc_subsystem is
 -- Interconnect configuration
 -- C_NB_SLAVES equals the number of base
 constant C_NB_MASTERS   : integer := 2; -- CPU and external initiators
-constant C_NB_SLAVES    : integer := 4; -- RAM, UART, GPIO, register bank, axi trng
+constant C_NB_SLAVES    : integer := 6; -- RAM, UART, GPIO, register bank, axi trng
 
 constant C_ADDR_START : axi_32b_bus_type := (
     0 => G_BASE0,

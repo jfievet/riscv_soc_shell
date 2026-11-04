@@ -24,6 +24,7 @@ constant num_random_tests : integer := 128;
 
 constant G_ADDR_WIDTH : integer := 32;
 constant G_DATA_WIDTH : integer := 32;
+constant C_ENABLE_TRNG  : boolean := TRUE;
 constant C_ENABLE_SDRAM : boolean := TRUE;
 
 signal ref_DAY_HEX    : std_logic_vector(7 downto 0)  := C_DAY_HEX;
@@ -416,63 +417,67 @@ begin
         wait until rising_edge(resetn);
         wait for 1 us;
 
-        info("Starting AXI TRNG test");
+        if C_ENABLE_TRNG then
 
-        -- Check initial status = IDLE
-        read_bus(net, bus_handle, x"00400004", v_data_read);
-        check_equal(v_data_read, std_logic_vector'(x"00000000"),
-                    "TRNG initial status is not IDLE");
+            info("Starting AXI TRNG test");
 
-        -- Configure accumulation cycles = 1000
-        write_bus(net, bus_handle, x"0040000C", x"000003E8");
-
-        -- Read back accumulation configuration
-        read_bus(net, bus_handle, x"0040000C", v_data_read);
-        check_equal(v_data_read, std_logic_vector'(x"000003E8"),
-                    "TRNG accumulation configuration mismatch");
-
-        -- Start acquisition
-        info("TRNG START");
-        write_bus(net, bus_handle, x"00400000", x"00000001");
-
-        -- Check status = BUSY
-        read_bus(net, bus_handle, x"00400004", v_data_read);
-        check_equal(v_data_read, std_logic_vector'(x"00000001"),
-                    "TRNG status is not BUSY");
-
-        -- Poll STATUS until DONE
-        for i in 0 to 2000 loop
-
+            -- Check initial status = IDLE
             read_bus(net, bus_handle, x"00400004", v_data_read);
+            check_equal(v_data_read, std_logic_vector'(x"00000000"),
+                        "TRNG initial status is not IDLE");
 
-            exit when v_data_read = x"00000002";
+            -- Configure accumulation cycles = 1000
+            write_bus(net, bus_handle, x"0040000C", x"000003E8");
 
-            wait for 100 ns;
+            -- Read back accumulation configuration
+            read_bus(net, bus_handle, x"0040000C", v_data_read);
+            check_equal(v_data_read, std_logic_vector'(x"000003E8"),
+                        "TRNG accumulation configuration mismatch");
 
-        end loop;
+            -- Start acquisition
+            info("TRNG START");
+            write_bus(net, bus_handle, x"00400000", x"00000001");
 
-        -- Check acquisition completed
-        check_equal(v_data_read, std_logic_vector'(x"00000002"),
-                    "TRNG acquisition timeout");
+            -- Check status = BUSY
+            read_bus(net, bus_handle, x"00400004", v_data_read);
+            check_equal(v_data_read, std_logic_vector'(x"00000001"),
+                        "TRNG status is not BUSY");
 
-        -- Read random data
-        read_bus(net, bus_handle, x"00400008", v_data_read);
+            -- Poll STATUS until DONE
+            for i in 0 to 2000 loop
 
-        info("TRNG RANDOM DATA = 0x" & to_hstring(v_data_read));
+                read_bus(net, bus_handle, x"00400004", v_data_read);
 
-        -- Clear acquisition
-        info("TRNG CLEAR");
-        write_bus(net, bus_handle, x"00400000", x"00000002");
+                exit when v_data_read = x"00000002";
 
-        -- Check status = IDLE
-        read_bus(net, bus_handle, x"00400004", v_data_read);
-        check_equal(v_data_read, std_logic_vector'(x"00000000"),
-                    "TRNG status is not IDLE after CLEAR");
+                wait for 100 ns;
 
-        -- Check random data cleared
-        read_bus(net, bus_handle, x"00400008", v_data_read);
-        check_equal(v_data_read, std_logic_vector'(x"00000000"),
-                    "TRNG RANDOM_DATA not cleared");
+            end loop;
+
+            -- Check acquisition completed
+            check_equal(v_data_read, std_logic_vector'(x"00000002"),
+                        "TRNG acquisition timeout");
+
+            -- Read random data
+            read_bus(net, bus_handle, x"00400008", v_data_read);
+
+            info("TRNG RANDOM DATA = 0x" & to_hstring(v_data_read));
+
+            -- Clear acquisition
+            info("TRNG CLEAR");
+            write_bus(net, bus_handle, x"00400000", x"00000002");
+
+            -- Check status = IDLE
+            read_bus(net, bus_handle, x"00400004", v_data_read);
+            check_equal(v_data_read, std_logic_vector'(x"00000000"),
+                        "TRNG status is not IDLE after CLEAR");
+
+            -- Check random data cleared
+            read_bus(net, bus_handle, x"00400008", v_data_read);
+            check_equal(v_data_read, std_logic_vector'(x"00000000"),
+                        "TRNG RANDOM_DATA not cleared");
+
+        end if; -- end G_ENABLE_TRNG
 
         info("Finished");
 
@@ -570,6 +575,7 @@ rresp <= cpu_axi_rresp;
 axi_soc_subsystem_inst : entity work.axi_soc_subsystem
     generic map (
         G_SIM           => TRUE,
+        G_ENABLE_TRNG    => C_ENABLE_TRNG,
         G_ENABLE_SDRAM   => C_ENABLE_SDRAM,
         USE_ASYNC_RESET => FALSE,
         USE_SYNC_RESET => TRUE,
