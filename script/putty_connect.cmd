@@ -1,0 +1,1 @@
+putty -serial COM7 -sercfg 250000,8,n,1,N
