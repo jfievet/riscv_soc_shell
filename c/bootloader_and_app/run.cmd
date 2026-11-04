@@ -5,7 +5,7 @@ REM ------------------------------------------------------------------
 REM -- Configuration
 REM ------------------------------------------------------------------
 
-set APP_DIR=uart_window_calib
+set APP_DIR=snake
 set "APP_MEMORY=BRAM"
 
 REM Select the application linker script before generating or compiling files.
