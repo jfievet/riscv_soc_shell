@@ -1010,3 +1010,370 @@ end generate gen_sdram;
 
 end rtl;
 
+
+-- Analyze axi_soc_subsystem.vhd before this file, into the same library.
+-- Select explicitly: entity work.axi_soc_subsystem(rtl_v2).
+-- Unqualified entity instantiations can bind to the most recently analyzed
+-- architecture. No parent instantiation or source list is changed here.
+architecture rtl_v2 of axi_soc_subsystem is
+    type target_t is (t_ram, t_uart, t_gpio, t_system, t_unmapped);
+    type write_state_t is (w_collect, w_dispatch, w_send, w_response,
+                           w_internal_response, w_blocked);
+    type read_state_t is (r_idle, r_dispatch, r_send, r_response,
+                          r_internal_response, r_blocked);
+
+    -- Only the two retained peripheral interfaces; no interconnect bus arrays.
+    type request_t is record
+        awvalid, wvalid, bready, arvalid, rready : std_logic;
+        awaddr, araddr, wdata : std_logic_vector(31 downto 0);
+        wstrb : std_logic_vector(3 downto 0);
+    end record;
+    type response_t is record
+        awready, wready, bvalid, arready, rvalid : std_logic;
+        bresp, rresp : std_logic_vector(1 downto 0);
+        rdata : std_logic_vector(31 downto 0);
+    end record;
+    signal ram_req, uart_req : request_t;
+    signal ram_rsp, uart_rsp : response_t;
+    signal selected_write, selected_read : response_t;
+
+    signal ws : write_state_t := w_collect;
+    signal rs : read_state_t := r_idle;
+    signal wt, rt : target_t;
+    signal aw_full, w_full, aw_sent, w_sent : std_logic;
+    signal write_address, read_address : std_logic_vector(31 downto 0);
+    signal write_data : std_logic_vector(31 downto 0);
+    signal write_strobes : std_logic_vector(3 downto 0);
+    signal write_index, read_index : unsigned(4 downto 0);
+    signal gpio_value, loopback_value : std_logic_vector(31 downto 0);
+    signal internal_read_data : std_logic_vector(31 downto 0);
+    signal elapsed_time : std_logic_vector(63 downto 0);
+    signal time_sync : std_logic;
+    signal reset_active, ram_write_active, ram_read_active : boolean;
+
+    function decode(address_value : std_logic_vector(31 downto 0))
+        return target_t is
+        variable a : unsigned(31 downto 0) := unsigned(address_value);
+    begin
+        if a >= unsigned(G_BASE0) and a <= unsigned(G_LIMIT0) then
+            return t_ram;
+        elsif a >= unsigned(G_BASE1) and a <= unsigned(G_LIMIT1) then
+            return t_uart;
+        elsif a >= unsigned(G_BASE2) and a <= unsigned(G_LIMIT2) then
+            return t_gpio;
+        elsif a >= unsigned(G_BASE3) and a <= unsigned(G_LIMIT3) then
+            return t_system;
+        end if;
+        return t_unmapped;
+    end function;
+
+    function translate(address_value : std_logic_vector(31 downto 0);
+                       target : target_t) return unsigned is
+    begin
+        case target is
+            when t_ram => return unsigned(address_value) - unsigned(G_BASE0);
+            when t_uart => return unsigned(address_value) - unsigned(G_BASE1);
+            when t_gpio => return unsigned(address_value) - unsigned(G_BASE2);
+            when t_system => return unsigned(address_value) - unsigned(G_BASE3);
+            when others => return to_unsigned(0, 32);
+        end case;
+    end function;
+begin
+    assert G_ADDR_WIDTH = 32 and G_DATA_WIDTH = 32
+        report "axi_soc_subsystem(rtl_v2) requires 32-bit address/data"
+        severity failure;
+
+    reset_active <= (USE_ASYNC_RESET and async_reset = ASYNC_RESET_ACTIVE) or
+                    (USE_SYNC_RESET and sync_reset = SYNC_RESET_ACTIVE);
+    ram_write_active <= wt = t_ram and (ws = w_send or ws = w_response);
+    ram_read_active <= rt = t_ram and (rs = r_send or rs = r_response);
+
+    ext_axi_awready <= '0';
+    ext_axi_wready <= '0';
+    ext_axi_arready <= '0';
+    ext_axi_bvalid <= '0';
+    ext_axi_rvalid <= '0';
+    ext_axi_bresp <= (others => '0');
+    ext_axi_rresp <= (others => '0');
+    ext_axi_rdata <= (others => '0');
+
+    sdram_cke <= '0';
+    sdram_cs_n <= '1';
+    sdram_ras_n <= '1';
+    sdram_cas_n <= '1';
+    sdram_we_n <= '1';
+    sdram_ba <= (others => '0');
+    sdram_addr <= (others => '0');
+    sdram_dqm <= (others => '1');
+    sdram_dq <= (others => 'Z');
+    gpio_out <= gpio_value;
+
+    selected_write <= ram_rsp when wt = t_ram else uart_rsp;
+    selected_read <= ram_rsp when rt = t_ram else uart_rsp;
+    cpu_axi_awready <= '1' when ws = w_collect and aw_full = '0'
+                               and not reset_active else '0';
+    cpu_axi_wready <= '1' when ws = w_collect and w_full = '0'
+                              and not reset_active else '0';
+    cpu_axi_arready <= '1' when rs = r_idle and not reset_active else '0';
+    cpu_axi_bvalid <= '0' when reset_active else
+                      '1' when ws = w_internal_response else
+                      selected_write.bvalid when ws = w_response else '0';
+    cpu_axi_bresp <= selected_write.bresp when ws = w_response else "00";
+    cpu_axi_rvalid <= '0' when reset_active else
+                      '1' when rs = r_internal_response else
+                      selected_read.rvalid when rs = r_response else '0';
+    cpu_axi_rdata <= selected_read.rdata when rs = r_response else internal_read_data;
+    cpu_axi_rresp <= selected_read.rresp when rs = r_response else "00";
+
+    -- Unselected channels stay inactive. Payload storage is shared by targets.
+    route : process(write_address, read_address, write_data, write_strobes,
+                    reset_active, ws, rs, aw_sent, w_sent,
+                    cpu_axi_bready, cpu_axi_rready, wt, rt)
+        variable q : request_t;
+        variable ram_v, uart_v : request_t;
+    begin
+        q.awaddr := write_address;
+        q.araddr := read_address;
+        q.wdata := write_data;
+        q.wstrb := write_strobes;
+        q.awvalid := '0'; q.wvalid := '0'; q.bready := '0';
+        q.arvalid := '0'; q.rready := '0';
+        ram_v := q;
+        uart_v := q;
+        if not reset_active then
+            if ws = w_send then
+                q.awvalid := not aw_sent;
+                q.wvalid := not w_sent;
+            end if;
+            if ws = w_response then q.bready := cpu_axi_bready; end if;
+            if wt = t_ram then
+                ram_v.awvalid := q.awvalid;
+                ram_v.wvalid := q.wvalid;
+                ram_v.bready := q.bready;
+            elsif wt = t_uart then
+                uart_v.awvalid := q.awvalid;
+                uart_v.wvalid := q.wvalid;
+                uart_v.bready := q.bready;
+            end if;
+            if rs = r_send then q.arvalid := '1'; end if;
+            if rs = r_response then q.rready := cpu_axi_rready; end if;
+            if rt = t_ram then
+                ram_v.arvalid := q.arvalid;
+                ram_v.rready := q.rready;
+            elsif rt = t_uart then
+                uart_v.arvalid := q.arvalid;
+                uart_v.rready := q.rready;
+            end if;
+        end if;
+        ram_req <= ram_v;
+        uart_req <= uart_v;
+    end process;
+
+    controller : process(clk, async_reset)
+        variable target : target_t;
+        variable offset_value : unsigned(31 downto 0);
+        variable read_value : std_logic_vector(31 downto 0);
+        procedure reset_control is
+        begin
+            ws <= w_collect;
+            rs <= r_idle;
+            aw_full <= '0'; w_full <= '0';
+            aw_sent <= '0'; w_sent <= '0';
+            wt <= t_unmapped; rt <= t_unmapped;
+            gpio_value <= (others => '0');
+            loopback_value <= (others => '0');
+            internal_read_data <= (others => '0');
+            time_sync <= '0';
+            -- Payload/address registers need no reset while their valid is clear.
+        end procedure;
+    begin
+        if USE_ASYNC_RESET and async_reset = ASYNC_RESET_ACTIVE then
+            reset_control;
+        elsif rising_edge(clk) then
+            if USE_SYNC_RESET and sync_reset = SYNC_RESET_ACTIVE then
+                reset_control;
+            else
+                time_sync <= '0';
+                case ws is
+                    when w_collect =>
+                        if aw_full = '0' and cpu_axi_awvalid = '1' then
+                            target := decode(cpu_axi_awaddr);
+                            offset_value := translate(cpu_axi_awaddr, target);
+                            wt <= target;
+                            write_index <= offset_value(6 downto 2);
+                            if target = t_ram or target = t_uart then
+                                write_address <= std_logic_vector(offset_value);
+                            elsif target = t_gpio then
+                                write_index <= resize(offset_value(3 downto 2), 5);
+                            elsif target = t_system and offset_value(31 downto 7) /= 0 then
+                                wt <= t_unmapped;
+                            end if;
+                            aw_full <= '1';
+                        end if;
+                        if w_full = '0' and cpu_axi_wvalid = '1' then
+                            write_data <= cpu_axi_wdata;
+                            write_strobes <= cpu_axi_wstrb;
+                            w_full <= '1';
+                        end if;
+                        if aw_full = '1' and w_full = '1' then
+                            ws <= w_dispatch;
+                        end if;
+                    when w_dispatch =>
+                        case wt is
+                            when t_ram | t_uart =>
+                                if wt /= t_ram or not ram_read_active then
+                                    aw_sent <= '0'; w_sent <= '0';
+                                    ws <= w_send;
+                                end if;
+                            when t_gpio =>
+                                if write_index = 0 then
+                                    for i in 0 to 3 loop
+                                        if write_strobes(i) = '1' then
+                                            gpio_value(8*i+7 downto 8*i) <= write_data(8*i+7 downto 8*i);
+                                        end if;
+                                    end loop;
+                                end if;
+                                ws <= w_internal_response;
+                            when t_system =>
+                                -- The reference register bank ignores WSTRB.
+                                if write_index = 2 then loopback_value <= write_data; end if;
+                                ws <= w_internal_response;
+                            when t_unmapped => ws <= w_blocked;
+                        end case;
+                    when w_send =>
+                        if selected_write.awready = '1' then aw_sent <= '1'; end if;
+                        if selected_write.wready = '1' then w_sent <= '1'; end if;
+                        if (aw_sent = '1' or selected_write.awready = '1') and
+                           (w_sent = '1' or selected_write.wready = '1') then
+                            ws <= w_response;
+                        end if;
+                    when w_response =>
+                        if selected_write.bvalid = '1' and cpu_axi_bready = '1' then
+                            aw_full <= '0'; w_full <= '0'; ws <= w_collect;
+                        end if;
+                    when w_internal_response =>
+                        if cpu_axi_bready = '1' then
+                            aw_full <= '0'; w_full <= '0'; ws <= w_collect;
+                        end if;
+                    when w_blocked => null; -- Reference unmapped behavior: reset required.
+                end case;
+
+                case rs is
+                    when r_idle =>
+                        if cpu_axi_arvalid = '1' then
+                            target := decode(cpu_axi_araddr);
+                            offset_value := translate(cpu_axi_araddr, target);
+                            rt <= target;
+                            read_index <= offset_value(6 downto 2);
+                            if target = t_ram or target = t_uart then
+                                read_address <= std_logic_vector(offset_value);
+                            elsif target = t_gpio then
+                                read_index <= resize(offset_value(3 downto 2), 5);
+                            elsif target = t_system and offset_value(31 downto 7) /= 0 then
+                                rt <= t_unmapped;
+                            end if;
+                            rs <= r_dispatch;
+                        end if;
+                    when r_dispatch =>
+                        case rt is
+                            when t_ram | t_uart =>
+                                -- Write wins a simultaneous RAM dispatch. A write
+                                -- missing AW or W does not reserve the memory port.
+                                if rt /= t_ram or (not ram_write_active and
+                                   not (wt = t_ram and ws = w_dispatch)) then
+                                    rs <= r_send;
+                                end if;
+                            when t_gpio | t_system =>
+                                read_value := (others => '0');
+                                if rt = t_gpio then
+                                    case to_integer(read_index) is
+                                        when 0 => read_value := gpio_value;
+                                        when 1 => read_value := gpio_in;
+                                        when others => null;
+                                    end case;
+                                else
+                                    case to_integer(read_index) is
+                                        when 0 => read_value := C_YEAR_HEX & C_MONTH_HEX & C_DAY_HEX;
+                                        when 1 => read_value := x"00" & C_SECOND_HEX & C_MINUTE_HEX & C_HOUR_HEX;
+                                        when 2 => read_value := loopback_value;
+                                        when 3 =>
+                                            read_value := std_logic_vector(to_unsigned(G_SYS_FREQ, 32));
+                                            -- Registered pulse concurrent with RVALID;
+                                            -- time_elapsed samples it on the next edge.
+                                            time_sync <= '1';
+                                        when 4 => read_value := elapsed_time(31 downto 0);
+                                        when 5 => read_value := elapsed_time(63 downto 32);
+                                        when others => null; -- Previously undriven read entries.
+                                    end case;
+                                end if;
+                                internal_read_data <= read_value;
+                                rs <= r_internal_response;
+                            when t_unmapped => rs <= r_blocked;
+                        end case;
+                    when r_send =>
+                        if selected_read.arready = '1' then rs <= r_response; end if;
+                    when r_response =>
+                        if selected_read.rvalid = '1' and cpu_axi_rready = '1' then
+                            rs <= r_idle;
+                        end if;
+                    when r_internal_response =>
+                        if cpu_axi_rready = '1' then rs <= r_idle; end if;
+                    when r_blocked => null;
+                end case;
+            end if;
+        end if;
+    end process;
+
+    u_axi_ram : entity work.axi_ram
+        generic map (
+            USE_ASYNC_RESET => USE_ASYNC_RESET, USE_SYNC_RESET => USE_SYNC_RESET,
+            ASYNC_RESET_ACTIVE => ASYNC_RESET_ACTIVE, SYNC_RESET_ACTIVE => SYNC_RESET_ACTIVE,
+            G_DATA_WIDTH => G_DATA_WIDTH, G_ADDR_WIDTH => G_ADDR_WIDTH,
+            G_DEPTH => G_RAM_DEPTH, G_RAM_VENDOR => 1
+        )
+        port map (
+            clk => clk, async_reset => async_reset, sync_reset => sync_reset,
+            mem_axi_awvalid => ram_req.awvalid, mem_axi_awready => ram_rsp.awready,
+            mem_axi_awaddr => ram_req.awaddr, mem_axi_awprot => "000",
+            mem_axi_wvalid => ram_req.wvalid, mem_axi_wready => ram_rsp.wready,
+            mem_axi_wdata => ram_req.wdata, mem_axi_wstrb => ram_req.wstrb,
+            mem_axi_bvalid => ram_rsp.bvalid, mem_axi_bready => ram_req.bready,
+            mem_axi_arvalid => ram_req.arvalid, mem_axi_arready => ram_rsp.arready,
+            mem_axi_araddr => ram_req.araddr, mem_axi_arprot => "000",
+            mem_axi_rvalid => ram_rsp.rvalid, mem_axi_rready => ram_req.rready,
+            mem_axi_rdata => ram_rsp.rdata
+        );
+    ram_rsp.bresp <= "00";
+    ram_rsp.rresp <= "00";
+
+    u_axi_uart : entity work.axi_uart
+        generic map (
+            USE_ASYNC_RESET => USE_ASYNC_RESET, USE_SYNC_RESET => USE_SYNC_RESET,
+            ASYNC_RESET_ACTIVE => ASYNC_RESET_ACTIVE, SYNC_RESET_ACTIVE => SYNC_RESET_ACTIVE,
+            G_SYS_FREQ => G_SYS_FREQ, G_BAUDRATE => G_BAUDRATE,
+            G_TX_DEPTH => G_TX_DEPTH, G_RX_DEPTH => G_RX_DEPTH
+        )
+        port map (
+            ACLK => clk, async_reset => async_reset, sync_reset => sync_reset,
+            AWADDR => uart_req.awaddr, AWVALID => uart_req.awvalid, AWREADY => uart_rsp.awready,
+            WDATA => uart_req.wdata, WSTRB => uart_req.wstrb,
+            WVALID => uart_req.wvalid, WREADY => uart_rsp.wready,
+            BRESP => uart_rsp.bresp, BVALID => uart_rsp.bvalid, BREADY => uart_req.bready,
+            ARADDR => uart_req.araddr, ARVALID => uart_req.arvalid, ARREADY => uart_rsp.arready,
+            RDATA => uart_rsp.rdata, RRESP => uart_rsp.rresp,
+            RVALID => uart_rsp.rvalid, RREADY => uart_req.rready,
+            uart_tx => uart_tx, uart_rx => uart_rx
+        );
+
+    time_elapsed_inst : entity work.time_elapsed
+        generic map (
+            G_USE_ASYNC_RESET => USE_ASYNC_RESET, G_USE_SYNC_RESET => USE_SYNC_RESET,
+            G_ASYNC_RESET_ACTIVE => '1', G_SYNC_RESET_ACTIVE => '1'
+        )
+        port map (
+            clk => clk, async_reset => async_reset, sync_reset => sync_reset,
+            sync_pulse => time_sync, elapsed_time => elapsed_time
+        );
+end architecture rtl_v2;
+
+

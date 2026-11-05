@@ -572,7 +572,7 @@ rresp <= cpu_axi_rresp;
 ----------------------------------------------------------------
 
 -- Instantiation
-axi_soc_subsystem_inst : entity work.axi_soc_subsystem
+axi_soc_subsystem_inst : entity work.axi_soc_subsystem(rtl)
     generic map (
         G_SIM           => TRUE,
         G_ENABLE_TRNG    => C_ENABLE_TRNG,
