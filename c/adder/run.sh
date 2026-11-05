@@ -12,7 +12,7 @@ python3 gen_time_header.py
 
 # RISC-V GCC toolchain
 RISCV_GCC_PATH="/opt/riscv/bin"
-RISCV_PREFIX="riscv-none-elf-"
+RISCV_PREFIX="riscv64-unknown-elf-"
 
 # Use toolchain from PATH if available
 if command -v "${RISCV_PREFIX}gcc" >/dev/null 2>&1; then
