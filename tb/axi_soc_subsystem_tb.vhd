@@ -24,8 +24,8 @@ constant num_random_tests : integer := 128;
 
 constant G_ADDR_WIDTH : integer := 32;
 constant G_DATA_WIDTH : integer := 32;
-constant C_ENABLE_TRNG  : boolean := TRUE;
-constant C_ENABLE_SDRAM : boolean := TRUE;
+constant C_ENABLE_TRNG  : boolean := FALSE;
+constant C_ENABLE_SDRAM : boolean := FALSE;
 
 signal ref_DAY_HEX    : std_logic_vector(7 downto 0)  := C_DAY_HEX;
 signal ref_MONTH_HEX  : std_logic_vector(7 downto 0)  := C_MONTH_HEX;
