@@ -85,6 +85,10 @@ signal ext_axi_rresp   : std_logic_vector(1 downto 0);
 signal ext_axi_rvalid  : std_logic;
 signal ext_axi_rready  : std_logic := '0';
 
+-- gpio signals
+signal gpio_in  : std_logic_vector(31 downto 0);
+signal gpio_out : std_logic_vector(31 downto 0);
+
 -- uart rx array
 type uart_rx_array_t is array (0 to 15) of std_logic_vector(7 downto 0);
 signal uart_rx_last16 : uart_rx_array_t := (others => (others => '0'));
@@ -478,7 +482,10 @@ soc_inst : entity work.soc
         ext_axi_rdata   => ext_axi_rdata,
         ext_axi_rresp   => ext_axi_rresp,
         ext_axi_rvalid  => ext_axi_rvalid,
-        ext_axi_rready  => ext_axi_rready
+        ext_axi_rready  => ext_axi_rready,
+
+        gpio_in  => gpio_in,
+        gpio_out => gpio_out
     );
 
 test_runner : process
@@ -865,6 +872,9 @@ begin
         end if;
     end if;
 end process;
+
+-- gpios loopback
+gpio_in <= gpio_out;
 
 
 end rtl;

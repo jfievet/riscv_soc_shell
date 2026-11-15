@@ -59,7 +59,12 @@ entity soc is
         sdram_ba        : out std_logic_vector(1 downto 0);
         sdram_addr      : out std_logic_vector(11 downto 0);
         sdram_dqm       : out std_logic_vector(1 downto 0);
-        sdram_dq        : inout std_logic_vector(15 downto 0)
+        sdram_dq        : inout std_logic_vector(15 downto 0);
+
+        --gpios
+        gpio_in  : in std_logic_vector(31 downto 0);
+        gpio_out : out std_logic_vector(31 downto 0)
+
     );
 end entity;
 
@@ -67,8 +72,6 @@ architecture rtl of soc is
 
     signal reset : std_logic;
     signal cpu_sync_reset : std_logic;
-    signal gpio_in  : std_logic_vector(31 downto 0);
-    signal gpio_out : std_logic_vector(31 downto 0);
 
     signal axi_awaddr : std_logic_vector(31 downto 0);
     signal axi_awprot : std_logic_vector(2 downto 0);
@@ -329,7 +332,5 @@ begin
                 sdram_dq           => sdram_dq
             );
     end generate gen_axi_soc_full;
-
-    gpio_in <= gpio_out;
 
 end architecture rtl;
