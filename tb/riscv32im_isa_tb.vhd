@@ -28,6 +28,7 @@ architecture beh of riscv32im_isa_tb is
   signal registers_debug_o : std_logic_vector(1023 downto 0);
   signal pc_debug_o, previous_pc_debug_o : std_logic_vector(31 downto 0);
   signal uart_tx : std_logic;
+  
 signal ext_axi_awaddr  : std_logic_vector(31 downto 0) := (others => '0');
 
 signal ext_axi_awprot  : std_logic_vector(2 downto 0)  := (others => '0');
@@ -65,6 +66,10 @@ signal ext_axi_rresp   : std_logic_vector(1 downto 0);
 signal ext_axi_rvalid  : std_logic;
 
 signal ext_axi_rready  : std_logic := '0';
+
+signal gpio_in  : std_logic_vector(31 downto 0);
+
+signal gpio_out : std_logic_vector(31 downto 0);
 
 procedure axi_write(
 
@@ -333,7 +338,10 @@ begin
 
         ext_axi_rvalid  => ext_axi_rvalid,
 
-        ext_axi_rready  => ext_axi_rready
+        ext_axi_rready  => ext_axi_rready,
+
+        gpio_in  => gpio_in,
+        gpio_out => gpio_out
 
     );
 
@@ -455,4 +463,8 @@ begin
     test_runner_cleanup(runner);
     wait;
   end process;
+
+-- gpios loopback
+gpio_in <= gpio_out;
+
 end architecture;
